@@ -13,13 +13,13 @@
       <span class="logo">📡</span>
       <div>
         <h1>Open RF Stack</h1>
-        <p>Modular, open-source software-defined radio platform — spectrum acquisition, signal classification, demodulation, direction finding, and speech transcription.</p>
+        <p>Modular, open-source software-defined radio platform — spectrum acquisition, signal classification, demodulation, direction finding, and speech transcription. Each component is independently deployable and communicates over a standard AMQP message bus.</p>
       </div>
     </div>
     <div class="hdr-badges">
       <a href="https://github.com/BMichaud7" class="btn-gh">GitHub ↗</a>
-      <span class="tag">C++20</span><span class="tag">SoapySDR</span><span class="tag">AMQP 1.0</span><span class="tag">APCO-25</span>
-      <p class="compat">Works with any <strong>SoapySDR</strong>-compatible device — RTL-SDR, HackRF, LimeSDR, USRP B2xx, airspy, SDRplay, and more.</p>
+      <span class="tag">C++20</span><span class="tag">SoapySDR</span><span class="tag">AMQP 1.0</span><span class="tag">APCO-25</span><span class="tag">whisper.cpp</span><span class="tag">ONNX</span>
+      <p class="compat">Works with any <strong>SoapySDR</strong>-compatible device — RTL-SDR, HackRF, LimeSDR, USRP B2xx, airspy, SDRplay, and more. No vendor lock-in.</p>
     </div>
   </div>
 </header>
@@ -37,6 +37,7 @@
   <a href="#df">Direction Finding</a>
   <a href="#speech">Speech</a>
   <a href="#gui">Desktop GUI</a>
+  <a href="#scripts">Scripts / Ops</a>
   <div class="nav-sep">Results</div>
   <a href="#ml-acc">ML Accuracy</a>
   <a href="#df-acc">DF Accuracy</a>
@@ -46,32 +47,41 @@
   <a href="#protos">All Protocols</a>
   <div class="nav-sep">Library</div>
   <a href="#sdk">SdrSdk</a>
+  <a href="#taskapi">SdrTaskApi</a>
 </nav>
 
 <main>
 
 <section id="arch">
 <h2>Architecture</h2>
-<p>Each component runs as an independent container and communicates exclusively via <strong>AMQP 1.0</strong> (Apache ActiveMQ Artemis). Deploy selectively — acquisition-only for spectrum monitoring, add classification for signal ID, or run the full pipeline for demodulation and speech transcription.</p>
+<p>Each component runs as an independent container connected by <strong>Apache ActiveMQ Artemis</strong> (AMQP 1.0). This decoupled design means you can run any subset of components — from a single acquisition node to a full multi-site pipeline — without modifying any code. All inter-component communication is JSON over AMQP topics; no component calls another directly.</p>
 <div class="diagram">
   <div class="drow">
     <div class="dbox hw">SDR Hardware<br><small>SoapySDR-compatible</small></div>
-    <div class="darr">→ UDP CF32</div>
-    <div class="dbox core">Resource Manager<br><small>Scheduler · IQ router</small></div>
+    <div class="darr">→ raw IQ (UDP CF32)</div>
+    <div class="dbox core">Resource Manager<br><small>Task scheduler · IQ router · Preemption</small></div>
     <div class="darr">→</div>
-    <div class="dbox core">AcquisitionApp<br><small>FFT · CFAR · Persistence</small></div>
+    <div class="dbox core">AcquisitionApp<br><small>Welch FFT · CA-CFAR · Persistence filter</small></div>
   </div>
-  <div class="dconn">↓ rf.detections</div>
+  <div class="dconn">↓ rf.detections (RF_DETECTION JSON — freq, BW, power, IQ snapshot)</div>
   <div class="drow multi">
-    <div class="dbox app">AnalysisApp<br><small>36-class ONNX classifier</small></div>
-    <div class="dbox app">DemodApp<br><small>10+ protocol decoders</small></div>
-    <div class="dbox app">DfApp<br><small>MUSIC bearing estimation</small></div>
+    <div class="dbox app">AnalysisApp<br><small>36-class AMR · Fast+slow ONNX paths</small></div>
+    <div class="dbox app">DemodApp<br><small>14 protocol decoders · P25 control</small></div>
+    <div class="dbox app">DfApp<br><small>MUSIC · covariance · eigendecomposition</small></div>
   </div>
-  <div class="dconn">↓ rf.demod (PCM audio) · rf.df_results · rf.p25.grants</div>
+  <div class="dconn">↓ rf.demod (PCM audio base64) · rf.analysis · rf.df_results · rf.p25.grants</div>
   <div class="drow center">
-    <div class="dbox app">SpeechApp<br><small>VAD + Whisper STT · SQLite log</small></div>
+    <div class="dbox app">SpeechApp<br><small>EnergyVad · whisper.cpp · SQLite transcripts</small></div>
   </div>
-  <div class="dbus">Apache ActiveMQ Artemis — AMQP 1.0 message bus</div>
+  <div class="dbus">Apache ActiveMQ Artemis — AMQP 1.0 message bus · PostgreSQL detection store</div>
+</div>
+
+<h4>Deployment options</h4>
+<div class="fg4">
+  <div class="feat"><strong>Minimal — scan only</strong><p>Resource Manager + AcquisitionApp. Detections streamed to AMQP and stored in PostgreSQL. Lowest resource usage.</p></div>
+  <div class="feat"><strong>Classification</strong><p>Add AnalysisApp to automatically identify every detected signal's modulation type using the 36-class ONNX model.</p></div>
+  <div class="feat"><strong>Demodulation</strong><p>Add DemodApp to decode analog and digital audio, P25 trunking, AIS, POCSAG, ACARS, and more.</p></div>
+  <div class="feat"><strong>Full pipeline</strong><p>All components including DfApp (bearing) and SpeechApp (voice transcription) for complete signal intelligence.</p></div>
 </div>
 </section>
 
@@ -79,34 +89,57 @@
 <h2>Quick Start</h2>
 <div class="steps">
   <div class="step"><div class="sn">1</div><div class="sb">
-    <h3>Clone</h3>
+    <h3>Clone SdrScripts</h3>
     <pre><code>git clone https://github.com/BMichaud7/SdrScripts
 cd SdrScripts</code></pre>
   </div></div>
   <div class="step"><div class="sn">2</div><div class="sb">
-    <h3>Configure your device</h3>
-    <p>Edit <code>hw-test/devices-direct.xml</code> with your SoapySDR driver and connection string. See the <a href="#hw">hardware section</a> for driver strings.</p>
+    <h3>Configure your SDR device</h3>
+    <p>Edit <code>hw-test/devices-direct.xml</code> with your SoapySDR driver string and connection URI. See the <a href="#hw">hardware section</a> for all supported devices and their driver strings.</p>
+    <pre><code>&lt;device&gt;
+  &lt;id&gt;sdr-0&lt;/id&gt;
+  &lt;driver&gt;rtlsdr&lt;/driver&gt;        &lt;!-- or hackrf, lime, uhd, … --&gt;
+  &lt;caps&gt;
+    &lt;freq_min_hz&gt;500000&lt;/freq_min_hz&gt;
+    &lt;freq_max_hz&gt;1700000000&lt;/freq_max_hz&gt;
+    &lt;sample_rate_max_sps&gt;3200000&lt;/sample_rate_max_sps&gt;
+  &lt;/caps&gt;
+&lt;/device&gt;</code></pre>
   </div></div>
   <div class="step"><div class="sn">3</div><div class="sb">
-    <h3>Scan</h3>
-    <pre><code># Acquisition only (lightest — just detections)
+    <h3>Start scanning</h3>
+    <pre><code># Acquisition + broker only — lightest config
 ./scan.sh --hw --no-analysis
 
-# Full pipeline — classify + demodulate + direction-find
+# Add signal classification
+./scan.sh --hw
+
+# Full pipeline — classify, demodulate, direction-find
 ./scan.sh --hw --demod --df</code></pre>
+    <p>scan.sh manages the full container lifecycle via Podman — starts Artemis, Resource Manager, and all selected components. Automatically purges stale task queues on startup.</p>
   </div></div>
   <div class="step"><div class="sn">4</div><div class="sb">
     <h3>Query results</h3>
-    <pre><code>psql -U sdr sdr_scanner -c "SELECT * FROM recent_signals;"</code></pre>
+    <pre><code>-- Live signal feed
+SELECT last_seen, freq_mhz, bw_khz, modulation, hypothesis, hits
+FROM recent_signals;
+
+-- Classified signals in last hour
+SELECT freq_mhz, modulation, hypothesis, hyp_conf
+FROM recent_classifications;
+
+-- P25 channel activity
+SELECT role, freq_mhz, talk_group, grant_count
+FROM p25_site_channels;</code></pre>
   </div></div>
 </div>
 </section>
 
 <section id="hw">
 <h2>Hardware Compatibility</h2>
-<p>The Resource Manager abstracts all hardware via SoapySDR. Switching devices requires only a config change — no code changes anywhere in the stack.</p>
+<p>The Resource Manager uses SoapySDR as the hardware abstraction layer. Any device with a SoapySDR plugin works — switching hardware requires only a config file change, no code changes anywhere in the stack.</p>
 <table>
-<thead><tr><th>Device</th><th>Frequency</th><th>Max BW</th><th>SoapySDR driver string</th></tr></thead>
+<thead><tr><th>Device</th><th>Frequency range</th><th>Max instantaneous BW</th><th>SoapySDR driver string</th></tr></thead>
 <tbody>
 <tr><td>RTL-SDR v3 / Blog v4</td><td>500 kHz – 1.7 GHz</td><td>3.2 MHz</td><td><code>driver=rtlsdr</code></td></tr>
 <tr><td>HackRF One</td><td>1 MHz – 6 GHz</td><td>20 MHz</td><td><code>driver=hackrf</code></td></tr>
@@ -116,25 +149,52 @@ cd SdrScripts</code></pre>
 <tr><td>Airspy HF+ Discovery</td><td>9 kHz – 31 MHz / 60–260 MHz</td><td>10 MHz</td><td><code>driver=airspyhf</code></td></tr>
 <tr><td>SDRplay RSP1A</td><td>1 kHz – 2 GHz</td><td>10 MHz</td><td><code>driver=sdrplay</code></td></tr>
 <tr><td>BladeRF xA4</td><td>47 MHz – 6 GHz</td><td>56 MHz</td><td><code>driver=bladerf</code></td></tr>
+<tr><td>RTL-SDR Blog V4 (w/ upconverter)</td><td>100 kHz – 1.7 GHz</td><td>3.2 MHz</td><td><code>driver=rtlsdr,serial=…</code></td></tr>
 </tbody>
 </table>
-<p class="note">† Extended frequency range requires firmware unlock.</p>
-<p>Multi-device is supported — run parallel tasks at different frequencies, or coherent multi-channel captures for direction finding.</p>
+<p class="note">† Extended frequency range requires firmware unlock on some units.</p>
+<h4>Multi-device support</h4>
+<p>Run any number of SDRs simultaneously. The Resource Manager schedules tasks across devices, supports coherent multi-channel IQ capture for direction finding, and handles per-device frequency and bandwidth constraints automatically. Configure via <code>scan_device_ids</code> in the scanner XML.</p>
 </section>
 
 <section id="bus">
 <h2>AMQP Message Bus</h2>
+<p>All components communicate exclusively through Apache ActiveMQ Artemis. No component calls another directly — every interaction is mediated by a named AMQP topic or queue. This makes individual components independently replaceable, scalable, and testable.</p>
 <table>
-<thead><tr><th>Topic / Queue</th><th>Publisher</th><th>Consumers</th><th>Schema</th></tr></thead>
+<thead><tr><th>Topic / Queue</th><th>Publisher</th><th>Consumers</th><th>Message format</th></tr></thead>
 <tbody>
-<tr><td><code>sdr.task.request</code></td><td>AcquisitionApp, DemodApp</td><td>Resource Manager</td><td>TASK_REQUEST_{SCAN,NARROWBAND,WIDEBAND}</td></tr>
-<tr><td><code>rf.detections</code></td><td>AcquisitionApp</td><td>AnalysisApp, DemodApp, DfApp, P25Monitor</td><td>RF_DETECTION JSON</td></tr>
-<tr><td><code>rf.analysis</code></td><td>AnalysisApp</td><td>DemodApp</td><td>ANALYSIS_RESULT (class, confidence, modulation)</td></tr>
-<tr><td><code>rf.demod</code></td><td>DemodApp</td><td>SpeechApp</td><td>DEMOD_RESULT (pcm_f32le base64, sample_rate_hz)</td></tr>
-<tr><td><code>rf.df_results</code></td><td>DfApp</td><td>—</td><td>DF_RESULT (azimuth_deg, confidence, site)</td></tr>
-<tr><td><code>rf.p25.grants</code></td><td>DemodApp P25Monitor</td><td>AcquisitionApp</td><td>P25_CHANNEL_GRANT (freq_hz, talk_group, encrypted)</td></tr>
+<tr><td><code>sdr.task.request</code></td><td>AcquisitionApp, DemodApp</td><td>Resource Manager</td><td>TASK_REQUEST_{SCAN, NARROWBAND, WIDEBAND, TRIGGERED}</td></tr>
+<tr><td><code>sdr.task.response</code></td><td>Resource Manager</td><td>AcquisitionApp, DemodApp</td><td>TASK_ACCEPTED / REJECTED — includes UDP port assignment</td></tr>
+<tr><td><code>rf.detections</code></td><td>AcquisitionApp</td><td>AnalysisApp, DemodApp, DfApp, P25Monitor</td><td>RF_DETECTION — freq, BW, power, SNR, scanner_id, 1024-sample IQ snapshot</td></tr>
+<tr><td><code>rf.analysis</code></td><td>AnalysisApp</td><td>DemodApp</td><td>ANALYSIS_RESULT — modulation class, confidence, hypothesis, rule path</td></tr>
+<tr><td><code>rf.demod</code></td><td>DemodApp</td><td>SpeechApp</td><td>DEMOD_RESULT — demod_class, pcm_f32le base64, sample_rate_hz, modulation</td></tr>
+<tr><td><code>rf.df_results</code></td><td>DfApp</td><td>Logging / display</td><td>DF_RESULT — azimuth_deg, confidence, num_elements, wacn, site_id</td></tr>
+<tr><td><code>rf.p25.grants</code></td><td>DemodApp P25Monitor</td><td>AcquisitionApp P25GrantConsumer</td><td>P25_CHANNEL_GRANT — freq_hz, talk_group, encrypted, emergency, site info</td></tr>
 </tbody>
 </table>
+
+<h4>Message schemas</h4>
+<pre><code>// RF_DETECTION (published by AcquisitionApp)
+{
+  "msg_type":      "RF_DETECTION",
+  "center_freq_hz": 462662500.0,
+  "bandwidth_hz":   12500.0,
+  "power_db":       -87.3,
+  "snr_db":         8.4,
+  "scanner_id":     "scanner-0",
+  "timestamp_ms":   1717431600000,
+  "iq_snapshot_b64": "..."        // 1024 CF32 samples, base64
+}
+
+// DEMOD_RESULT (published by DemodApp)
+{
+  "msg_type":       "DEMOD_RESULT",
+  "demod_class":    "audio",
+  "modulation":     "FM_NB",
+  "sample_rate_hz": 48000,
+  "format":         "pcm_f32le",
+  "data_b64":       "..."         // float32 LE audio, base64
+}</code></pre>
 </section>
 
 <!-- ── Resource Manager ── -->
@@ -143,16 +203,31 @@ cd SdrScripts</code></pre>
   <h2>Resource Manager <a href="https://github.com/BMichaud7/SdrResourceManager" class="rlink">↗</a></h2>
   <span class="lang cpp">C++20</span>
 </div>
-<p>Central hardware broker. Manages task scheduling, priority preemption, and IQ fan-out to multiple consumers — all without any consumer knowing about the others.</p>
+<p>The central hardware broker. Every application that needs IQ samples submits a task request; the Resource Manager schedules it, allocates a UDP port, and streams IQ to the requester. No application accesses the SDR hardware directly.</p>
+
+<h4>Scheduling features</h4>
 <div class="fg4">
-  <div class="feat"><strong>Rank preemption</strong><p>3-tier priority: Acquisition (1) &lt; Classification (2) &lt; Direction Finding (3). Higher-rank tasks preempt lower-rank and release hardware on completion.</p></div>
-  <div class="feat"><strong>Shared-LO fan-out</strong><p>Two tasks at the same frequency share one hardware channel via sub-band decomposition. Zero re-tuning overhead.</p></div>
-  <div class="feat"><strong>Independent-LO</strong><p>On multi-channel SDRs, tasks at different frequencies run truly simultaneously on separate RF chains.</p></div>
-  <div class="feat"><strong>Combined-window</strong><p>A new task within the device's instantaneous BW triggers a retune to a new centre covering both — neither stream drops.</p></div>
+  <div class="feat"><strong>Priority preemption</strong><p>Three-tier rank: Acquisition (1) &lt; Classification (2) &lt; Direction Finding (3). Higher-rank tasks preempt lower-rank and release the SDR on completion. Prevents monopolisation.</p></div>
+  <div class="feat"><strong>Shared-LO fan-out</strong><p>Two tasks at the same centre frequency share a single hardware channel via sub-band decomposition. A second subscriber pays zero retune cost and gets IQ immediately.</p></div>
+  <div class="feat"><strong>Independent-LO</strong><p>On multi-RX devices (USRP B210, LimeSDR), tasks at different frequencies run truly simultaneously on separate RF chains — full bandwidth for each task.</p></div>
+  <div class="feat"><strong>Combined-window</strong><p>A second task within the device's instantaneous bandwidth triggers a retune to a wider centre frequency covering both. Neither task loses samples during the transition.</p></div>
 </div>
+
+<h4>Task types</h4>
+<table>
+<thead><tr><th>Task type</th><th>Description</th><th>Typical use</th></tr></thead>
+<tbody>
+<tr><td>SCAN</td><td>Multi-step frequency sweep; controller tunes through a list of centre frequencies</td><td>AcquisitionApp wide-area sweep</td></tr>
+<tr><td>NARROWBAND</td><td>Single frequency, fixed duration IQ capture</td><td>DemodApp voice capture, AnalysisApp slow-path</td></tr>
+<tr><td>WIDEBAND</td><td>Single frequency, continuous IQ stream</td><td>Burst capture, raw IQ recording</td></tr>
+<tr><td>TRIGGERED</td><td>Wait for power threshold, then capture</td><td>Burst signal capture, VOX</td></tr>
+</tbody>
+</table>
+
 <div class="results">
-  <div class="rrow"><span class="rl">Unit tests</span><span class="rv">200+ — scheduling, preemption, port allocation, concurrent tasks, coherent multi-board</span></div>
-  <div class="rrow"><span class="rl">Hardware tests</span><span class="rv">Validated against live SDR hardware via SoapySDR fake driver</span></div>
+  <div class="rrow"><span class="rl">Unit tests</span><span class="rv">200+ tests — scheduling, preemption, port pool, concurrent tasks, shared-LO fan-out, combined-window retune</span></div>
+  <div class="rrow"><span class="rl">Hardware validation</span><span class="rv">Tested against physical SDR hardware; fake SoapySDR driver used for CI</span></div>
+  <div class="rrow"><span class="rl">Queue purge</span><span class="rv">scan.sh auto-purges stale task queues on startup — prevents backlog accumulation during long sessions</span></div>
 </div>
 </section>
 
@@ -162,21 +237,28 @@ cd SdrScripts</code></pre>
   <h2>AcquisitionApp <a href="https://github.com/BMichaud7/AcquisitionApp" class="rlink">↗</a></h2>
   <span class="lang cpp">C++20</span><span class="badge-g">64 tests ✓</span>
 </div>
-<p>Continuous spectrum scanner. Submits frequency-sweep tasks, receives raw IQ over UDP, and runs a four-stage detection pipeline. All detections persist to PostgreSQL and stream to AMQP.</p>
+<p>Continuous spectrum scanner. Submits frequency-sweep tasks to the Resource Manager, receives CF32 IQ over UDP, runs a four-stage signal detection pipeline, and publishes every detection to <code>rf.detections</code>. Detections also persist to PostgreSQL for historical querying.</p>
+
+<h4>Detection pipeline</h4>
 <div class="pipeline">
-  <div class="ps"><div class="pi">📊</div><strong>Welch averaging</strong><p>50%-overlapping Blackman-Harris windowed FFT frames. Reduces noise variance ~18 dB vs single-shot FFT.</p></div>
+  <div class="ps"><div class="pi">📊</div><strong>Welch averaging</strong><p>50%-overlapping Blackman-Harris windowed FFT frames averaged linearly. Reduces noise variance by ~18 dB vs a single-shot FFT, enabling detection of signals just above the noise floor.</p></div>
   <div class="pa">→</div>
-  <div class="ps"><div class="pi">🎯</div><strong>CA-CFAR</strong><p>O(N) prefix-sum, 8 guard + 32 reference cells per side. Threshold adapts to local noise density.</p></div>
+  <div class="ps"><div class="pi">🎯</div><strong>CA-CFAR</strong><p>Cell-averaging CFAR with O(N) prefix-sum implementation. 8 guard + 32 reference cells per side. Threshold adapts to local noise density — stable in mixed signal environments.</p></div>
   <div class="pa">→</div>
-  <div class="ps"><div class="pi">🔁</div><strong>Persistence filter</strong><p>Signal must appear in ≥2 consecutive sweeps. Strong signals (PAPR ≥15 dB) bypass and emit immediately.</p></div>
+  <div class="ps"><div class="pi">🔁</div><strong>Persistence filter</strong><p>Signal must appear in ≥2 consecutive sweeps before emitting. Strong signals (PAPR ≥15 dB) bypass the filter and emit immediately on first detection.</p></div>
   <div class="pa">→</div>
-  <div class="ps"><div class="pi">📍</div><strong>Sub-bin interpolation</strong><p>3-point parabolic fit on peak bin. ~1–2 kHz accuracy regardless of FFT resolution.</p></div>
+  <div class="ps"><div class="pi">📍</div><strong>Sub-bin interpolation</strong><p>3-point parabolic fit on the FFT peak bin. Achieves ~1–2 kHz centre-frequency accuracy regardless of FFT bin width.</p></div>
 </div>
+
+<h4>P25 voice channel following</h4>
+<p>When DemodApp publishes a P25 channel grant to <code>rf.p25.grants</code>, AcquisitionApp's P25GrantConsumer submits a priority NARROWBAND task at the granted voice channel frequency. The captured IQ is published to <code>rf.detections</code> tagged with the talk-group ID (e.g. <code>scanner_id=scanner-0-tg1001</code>), allowing downstream components to process it as a labelled signal.</p>
+
 <div class="results">
-  <div class="rrow"><span class="rl">Sweep rate</span><span class="rv">~7.6 s / 920 MHz sweep at 20 MSPS (no analysis window)</span></div>
-  <div class="rrow"><span class="rl">Minimum detectable</span><span class="rv">−98 dBm with PAPR ≥ 3 dB reliably detected in live tests</span></div>
-  <div class="rrow"><span class="rl">Frequency accuracy</span><span class="rv">±1–2 kHz with sub-bin interpolation at typical sample rates</span></div>
-  <div class="rrow"><span class="rl">False alarm control</span><span class="rv">CFAR threshold_db + 2-sweep persistence confirmation</span></div>
+  <div class="rrow"><span class="rl">Sweep throughput</span><span class="rv">~7.6 s / 920 MHz at 20 MSPS with 4096-point FFT and 50% overlap (no analysis pause)</span></div>
+  <div class="rrow"><span class="rl">Minimum detectable signal</span><span class="rv">−98 dBm with PAPR ≥ 3 dB reliably detected in live hardware tests at 400–2000 MHz</span></div>
+  <div class="rrow"><span class="rl">Frequency accuracy</span><span class="rv">±1–2 kHz with sub-bin parabolic interpolation at typical sample rates</span></div>
+  <div class="rrow"><span class="rl">False alarm control</span><span class="rv">CFAR threshold_db tunable per deployment + 2-sweep persistence confirmation</span></div>
+  <div class="rrow"><span class="rl">IQ snapshot</span><span class="rv">Every detection includes a 1024-sample CF32 IQ snapshot for immediate fast-path ONNX classification — no SDR re-acquisition needed</span></div>
 </div>
 </section>
 
@@ -186,39 +268,59 @@ cd SdrScripts</code></pre>
   <h2>AnalysisApp — Signal Classification <a href="https://github.com/BMichaud7/AnalysisApp" class="rlink">↗</a></h2>
   <span class="lang cpp">C++20</span><span class="badge-g">33 tests ✓</span>
 </div>
-<p>Automatic modulation recognition (AMR) via a two-path ONNX pipeline. Classifies every detected signal without manual tuning.</p>
+<p>Automatic modulation recognition (AMR) service. Classifies every detected signal into one of 36 modulation and protocol classes without any manual tuning. Uses a two-path ONNX pipeline to balance speed and accuracy.</p>
+
 <div class="two-col">
 <div>
 <h4>Fast path — ~5 ms</h4>
-<p>36-class ResNet runs on the 1024-sample IQ snapshot already embedded in every <code>RF_DETECTION</code>. No SDR re-acquisition. Fires when confidence ≥ 0.75.</p>
+<p>A 36-class RadioResNet runs directly on the 1024-sample IQ snapshot embedded in every <code>RF_DETECTION</code> message. No SDR re-acquisition is needed. Fires when classifier confidence ≥ 0.75.</p>
+<p>The model was trained on 922k synthetic samples with realistic hardware impairments: IQ imbalance (±0.5 dB), DC offset, phase noise, AWGN (−10 to +30 dB SNR), and multipath (1–3 taps).</p>
 </div>
 <div>
 <h4>Slow path — ~80 ms</h4>
-<p>Fetches 65k fresh samples via NARROWBAND task. Computes 4th-order cumulants, OFDM CP ratio, FM deviation, chirp rate. Feeds rule engine + ONNX in parallel.</p>
+<p>Triggered when fast-path confidence &lt; 0.75. Requests 65k fresh samples via a NARROWBAND task, then computes:</p>
+<ul>
+<li>4th-order cumulants (C42, C40) for modulation order</li>
+<li>OFDM cyclic prefix ratio</li>
+<li>FM peak deviation</li>
+<li>Linear chirp rate (LFM/CSS)</li>
+<li>PAPR and spectral flatness</li>
+</ul>
+<p>Features feed a rule engine and ONNX inference in parallel. The higher-confidence result is published.</p>
 </div>
+</div>
+
+<h4>Classification classes (36)</h4>
+<div class="class-grid">
+  <div class="cg-group"><strong>Analog</strong><span>FM_WB · FM_NB · AM_DSB · AM_DSB_SC · AM_SSB_USB · AM_SSB_LSB</span></div>
+  <div class="cg-group"><strong>Linear digital</strong><span>BPSK · QPSK · 8PSK · 16PSK · 32PSK · QAM16 · QAM32 · QAM64 · QAM256 · 4ASK · 16ASK</span></div>
+  <div class="cg-group"><strong>Non-linear digital</strong><span>FSK · 4FSK · 8FSK · MSK · GFSK · GMSK · OOK · OFDM</span></div>
+  <div class="cg-group"><strong>Waveforms</strong><span>CSS · LFM · TONE</span></div>
+  <div class="cg-group"><strong>Protocols</strong><span>P25_C4FM · DMR · NXDN · DSTAR · TETRA · AIS · POCSAG · ACARS</span></div>
 </div>
 
 <div id="ml-acc" class="results">
-<h4>ML accuracy — 28-class baseline model (val_acc = 0.743)</h4>
+<h4>ML accuracy — 36-class model (val_acc = 0.780)</h4>
 <div class="acc-grid">
-  <div class="acc good"><div class="an">≥ 95%</div><div class="al">CSS · LFM · TONE · AM_SSB · FM_WB · OFDM</div></div>
-  <div class="acc ok"><div class="an">85–95%</div><div class="al">FM_NB · AM_DSB · BPSK · GMSK · OOK · FSK variants</div></div>
-  <div class="acc warn"><div class="an">70–85%</div><div class="al">QPSK · 8PSK · QAM16 · QAM32 · QAM256</div></div>
-  <div class="acc bad"><div class="an">15%</div><div class="al">QAM64 (hardest — confused with QAM32/256 at low SNR)</div></div>
+  <div class="acc good"><div class="an">≥ 95%</div><div class="al">CSS · LFM · TONE · AM_SSB · FM_WB · OFDM — highly distinctive waveforms</div></div>
+  <div class="acc ok"><div class="an">85–95%</div><div class="al">FM_NB · AM_DSB · BPSK · GMSK · MSK · OOK · FSK variants</div></div>
+  <div class="acc warn"><div class="an">70–85%</div><div class="al">QPSK · 8PSK · QAM16 · QAM32 · QAM256 · most protocol classes</div></div>
+  <div class="acc bad"><div class="an">~15%</div><div class="al">QAM64 — most difficult class, overlaps with QAM32/256 constellation at low SNR</div></div>
 </div>
-<p>Key improvement: original training data used ±2% SR frequency offset = 10+ full carrier rotations over 512 samples, destroying all constellation structure. Fixed to ±0.3% SR (realistic post-AFC residual) — significantly improved all classes.</p>
 
-<h4>36-class model — training complete</h4>
-<div class="acc-grid" style="margin-bottom:1rem">
-  <div class="acc good"><div class="an">0.780</div><div class="al">Final val_acc — 36 classes (was 0.743 at 28 classes)</div></div>
-  <div class="acc ok"><div class="an">0.087</div><div class="al">Min class accuracy (was 0.065)</div></div>
-  <div class="acc ok"><div class="an">30</div><div class="al">Epochs · 922k samples · RTX 2060 Super</div></div>
-  <div class="acc good"><div class="an">8</div><div class="al">New protocol classes added</div></div>
+<h4>Model comparison</h4>
+<div class="acc-grid" style="margin:.8rem 0 1rem">
+  <div class="acc good"><div class="an">0.780</div><div class="al">36-class model val_acc — includes P25, DMR, AIS, POCSAG, ACARS…</div></div>
+  <div class="acc ok"><div class="an">0.743</div><div class="al">28-class baseline val_acc (original protocol-agnostic model)</div></div>
+  <div class="acc ok"><div class="an">53%</div><div class="al">QAM256 recall — improved from 15% baseline with dedicated multipath training data</div></div>
+  <div class="acc ok"><div class="an">0.087</div><div class="al">Min class accuracy (was 0.065 in baseline)</div></div>
 </div>
-<div class="rrow"><span class="rl">New classes</span><span class="rv">P25_C4FM · DMR · NXDN · D-STAR · TETRA · AIS · POCSAG · ACARS</span></div>
-<div class="rrow"><span class="rl">Training data</span><span class="rv">922,000 samples — synth_v3_protocols.npz + qam_heavy.npz (multipath augmentation)</span></div>
-<div class="rrow"><span class="rl">Model</span><span class="rv">837k-parameter RadioResNet · focal loss γ=2 · QAM oversampling ×2</span></div>
-<div class="rrow"><span class="rl">Key improvement</span><span class="rv">±2% SR → ±0.3% SR freq offset fixed: preserves constellation structure for all classes</span></div>
+
+<div class="rrow"><span class="rl">Protocol classes</span><span class="rv">P25_C4FM · DMR · NXDN · D-STAR · TETRA · AIS · POCSAG · ACARS</span></div>
+<div class="rrow"><span class="rl">Training data</span><span class="rv">922,000 samples — synth_v3_protocols.npz (810k, 36 classes) + qam_heavy.npz (112k, QAM with multipath)</span></div>
+<div class="rrow"><span class="rl">Freq offset fix</span><span class="rv">Original ±2% SR = 10+ carrier rotations → ±0.3% SR (realistic post-AFC residual). Preserves constellation structure for all classes.</span></div>
+<div class="rrow"><span class="rl">Architecture</span><span class="rv">837k-parameter RadioResNet (8 residual blocks, 128 channels) · focal loss γ=2 · QAM oversampling ×2 · 30 epochs GPU</span></div>
+<div class="rrow"><span class="rl">DAE chain</span><span class="rv">Denoising autoencoder → 36-class classifier merged ONNX for low-SNR classification (amr_low_snr_denoised_36class.onnx)</span></div>
 </div>
 </section>
 
@@ -228,32 +330,47 @@ cd SdrScripts</code></pre>
   <h2>DemodApp — Demodulation <a href="https://github.com/BMichaud7/DemodApp" class="rlink">↗</a></h2>
   <span class="lang cpp">C++20</span><span class="badge-g">CI ✓</span>
 </div>
-<p>Demodulates classified signals into decoded content. All demodulators use <a href="https://liquidsdr.org">liquid-dsp</a> for the physical layer — FM discriminator, RRC-matched symbol synchroniser, and 4-level slicer.</p>
+<p>Demodulates classified RF signals into decoded content — audio PCM, bit streams, or text. Subscribes to <code>rf.analysis</code> (AnalysisApp classifications), fetches IQ for signals above the confidence threshold, and publishes decoded output to <code>rf.demod</code>.</p>
+<p>All physical-layer demodulation uses <a href="https://liquidsdr.org">liquid-dsp</a>: FM frequency discriminator, RRC-matched symbol synchroniser, Gaussian filter (GMSK), Costas-loop carrier recovery (PSK/QAM), and 4-level slicer (4FSK). A shared <code>IDemod</code> interface means adding a protocol requires only one new class.</p>
+
+<h4>P25 control channel decoder</h4>
+<p>The <code>P25Monitor</code> continuously decodes the P25 Phase 1 control channel independently of voice traffic. It C4FM-demodulates (4FSK, 4800 sym/s, ±600/±1800 Hz) the control channel IQ, parses Trunking System Blocks (TSBKs), and extracts:</p>
+<ul>
+  <li><strong>IDEN_UP</strong> — channel identifier → frequency mapping (band plan)</li>
+  <li><strong>RFSS_STATUS_BCAST</strong> — WACN, System ID, site identity</li>
+  <li><strong>GRP_V_CH_GRANT</strong> — group voice channel grant (TG → voice freq)</li>
+  <li><strong>IND_V_CH_GRANT</strong> — individual/unit-to-unit voice channel grant</li>
+</ul>
+<p>Grants matching the configured talk-group whitelist are published to <code>rf.p25.grants</code> for AcquisitionApp to act on.</p>
+
 <table class="dtbl">
-<thead><tr><th>Protocol</th><th>Modulation</th><th>Output</th><th>Bands / Use</th></tr></thead>
+<thead><tr><th>Protocol</th><th>Modulation</th><th>Output</th><th>Use</th></tr></thead>
 <tbody>
 <tr class="cat"><td colspan="4">Analog audio</td></tr>
-<tr><td>FM Wideband</td><td>FM ±75 kHz</td><td>PCM 48 kHz</td><td>Broadcast, aviation weather</td></tr>
-<tr><td>FM Narrowband</td><td>FM ±2.5–5 kHz</td><td>PCM 48 kHz</td><td>Land mobile, amateur, marine</td></tr>
+<tr><td>FM Wideband</td><td>FM ±75 kHz</td><td>PCM 48 kHz</td><td>Broadcast 87.5–108 MHz, NOAA weather</td></tr>
+<tr><td>FM Narrowband</td><td>FM ±2.5–5 kHz</td><td>PCM 48 kHz</td><td>Land mobile, amateur, marine, aviation</td></tr>
 <tr><td>AM-DSB / SSB</td><td>AM, USB, LSB</td><td>PCM 48 kHz</td><td>HF shortwave, aviation 118–136 MHz</td></tr>
 <tr class="cat"><td colspan="4">Digital voice</td></tr>
-<tr><td>P25 Phase 1</td><td>C4FM (4FSK)</td><td>PCM audio (FM path)</td><td>North American public safety</td></tr>
-<tr><td>DMR</td><td>4FSK TDMA</td><td>Raw dibits</td><td>Commercial / public safety; AMBE+2 future</td></tr>
-<tr><td>NXDN</td><td>4FSK FDMA</td><td>Raw dibits</td><td>Industrial (Icom IDAS, Kenwood NEXEDGE)</td></tr>
-<tr><td>D-STAR</td><td>GMSK</td><td>Raw bits</td><td>Amateur digital voice</td></tr>
-<tr><td>TETRA</td><td>π/4-DQPSK</td><td>Raw bits</td><td>European public safety trunking</td></tr>
+<tr><td>P25 Phase 1</td><td>C4FM (4FSK) 4800 sym/s</td><td>PCM audio (via FM demod)</td><td>North American public safety — control decode + voice follow</td></tr>
+<tr><td>DMR</td><td>4FSK TDMA 4800 sym/s</td><td>Raw dibits packed to bytes</td><td>MOTOTRBO, Hytera commercial/public safety; AMBE+2 voice codec future</td></tr>
+<tr><td>NXDN</td><td>4FSK FDMA 4800 sym/s</td><td>Raw dibits packed to bytes</td><td>Icom IDAS, Kenwood NEXEDGE — industrial, utilities</td></tr>
+<tr><td>D-STAR</td><td>GMSK 4800 bps BT=0.5</td><td>Raw bits packed to bytes</td><td>Amateur digital voice and 1200 bps data</td></tr>
+<tr><td>TETRA</td><td>π/4-DQPSK TDMA</td><td>Raw bits</td><td>European public safety trunking — police, fire, rail</td></tr>
 <tr class="cat"><td colspan="4">Data / telemetry</td></tr>
-<tr><td>AIS</td><td>GMSK 9600 bps</td><td>NRZI+HDLC bytes</td><td>Marine VHF 161–162 MHz</td></tr>
-<tr><td>POCSAG</td><td>2-FSK ±4500 Hz</td><td>Alphanumeric text</td><td>Paging, hospital dispatch</td></tr>
-<tr><td>ACARS</td><td>AM-FSK 2400 bps</td><td>SOH/ETX messages</td><td>Aircraft datalink, VHF 129–136 MHz</td></tr>
-<tr><td>AFSK / APRS</td><td>Bell 202 1200 bps</td><td>Bits</td><td>Packet radio, IoT telemetry, 144.39 MHz</td></tr>
-<tr><td>CW / Morse</td><td>OOK + tone</td><td>Audio</td><td>Amateur beacons, maritime</td></tr>
+<tr><td>AIS</td><td>GMSK 9600 bps BT=0.4</td><td>NRZI+HDLC decoded bytes</td><td>Marine VHF 161.975 / 162.025 MHz — SOLAS mandatory vessel ID</td></tr>
+<tr><td>POCSAG</td><td>2-FSK ±4500 Hz</td><td>Decoded alphanumeric text</td><td>Paging — hospital, fire dispatch, utilities; 512/1200/2400 baud auto-detect</td></tr>
+<tr><td>ACARS</td><td>AM-FSK 2400 bps</td><td>SOH/ETX message text</td><td>Aircraft datalink — clearances, weather, ATIS; VHF 129–136 MHz</td></tr>
+<tr><td>AFSK / APRS</td><td>Bell 202 1200 bps</td><td>Raw bits</td><td>Packet radio 144.39 MHz — position, telemetry, messaging</td></tr>
+<tr><td>CW / Morse</td><td>OOK keying + 400 Hz tone</td><td>Audio</td><td>Amateur beacons, maritime station ID</td></tr>
+<tr><td>PSK / QAM / ASK</td><td>Various constellation</td><td>Raw bits (Costas-loop)</td><td>Generic digital data — BPSK through QAM256</td></tr>
 </tbody>
 </table>
+
 <div class="results">
-<div class="rrow"><span class="rl">Protocol tests</span><span class="rv">26 tests with exact protocol-spec waveforms: C4FM with 0x5575F5FF77FF sync, POCSAG preamble + 0x7CD215D8 sync word, HDLC-framed AIS, ACARS SOH/ETX payload</span></div>
-<div class="rrow"><span class="rl">Cross-mod rejection</span><span class="rv">All demodulators verified stable on wrong-modulation input — no crashes</span></div>
-<div class="rrow"><span class="rl">Container tests</span><span class="rv"><code>podman build --target test -f DemodApp/Containerfile .</code></span></div>
+<div class="rrow"><span class="rl">Protocol tests</span><span class="rv">26 tests with exact protocol-spec waveforms: C4FM with 0x5575F5FF77FF frame sync, POCSAG preamble + 0x7CD215D8 sync codeword, HDLC-framed AIS with NRZI, ACARS SOH/ETX payload "TEST"</span></div>
+<div class="rrow"><span class="rl">Cross-modulation</span><span class="rv">All demodulators verified stable on wrong-modulation input — correct output type returned, no crashes</span></div>
+<div class="rrow"><span class="rl">FM voice RMS</span><span class="rv">RMS energy &gt; 0.001 verified on 3-harmonic (1 kHz + 2 kHz + 3 kHz) voice-like signal at SNR 20 dB</span></div>
+<div class="rrow"><span class="rl">Container tests</span><span class="rv"><code>podman build --target test -f DemodApp/Containerfile .</code> — runs all tests where liquid-dsp is available</span></div>
 </div>
 </section>
 
@@ -263,16 +380,30 @@ cd SdrScripts</code></pre>
   <h2>DfApp — Direction Finding <a href="https://github.com/BMichaud7/DfApp" class="rlink">↗</a></h2>
   <span class="lang cpp">C++20</span><span class="badge-g">CI ✓</span>
 </div>
-<p>Bearing estimation via the <strong>MUSIC algorithm</strong>. Requires multiple time-coherent receivers sharing a common LO reference (GPS-disciplined or hardwired). Works with any multi-element antenna array.</p>
-<div class="formula">P<sub>MUSIC</sub>(θ) = 1 / ‖ E<sub>N</sub><sup>H</sup> a(θ) ‖² — swept at 0.5° resolution</div>
+<p>Estimates the bearing (direction of arrival) of detected RF signals using the <strong>MUSIC algorithm</strong> (MUltiple SIgnal Classification). Operates on IQ snapshots from multiple receivers that share a common oscillator reference — phase differences between antenna elements are then purely geometric.</p>
+
+<h4>Algorithm</h4>
+<ol>
+  <li>Collect IQ snapshots from M antenna elements (same signal, different positions)</li>
+  <li>Build the M×N complex sample matrix X (M antennas, N samples each)</li>
+  <li>Form the spatial covariance matrix R = X Xᴴ / N</li>
+  <li>Eigendecompose R → signal subspace Eₛ and noise subspace Eₙ</li>
+  <li>Sweep azimuth θ at 0.5° resolution: P(θ) = 1 / ‖ Eₙᴴ a(θ) ‖²</li>
+  <li>Return the azimuth of the global spectral peak with its prominence as confidence</li>
+</ol>
+<div class="formula">P<sub>MUSIC</sub>(θ) = 1 / ‖ E<sub>N</sub><sup>H</sup> a(θ) ‖²</div>
+
+<h4>Phase coherence</h4>
+<p>All receivers must share a common LO reference. Options: GPS-disciplined oscillator (best), hardwired reference signal, or a shared timing pulse. Without coherence, phase offsets between receivers are random and bearing estimation fails. The aggregation window (default 5 s) controls how long snapshots are held waiting for all elements to report.</p>
 
 <div id="df-acc" class="results">
 <h4>Measured bearing accuracy</h4>
-<div class="rrow"><span class="rl">5-element UCA, SNR 25 dB</span><span class="rv good-text"><strong>&lt; 2°</strong> error at all tested azimuths (0° / 90° / 135° / 180° / 270°)</span></div>
-<div class="rrow"><span class="rl">5-element UCA, SNR 10 dB</span><span class="rv ok-text">&lt; 3° — still convergent at moderate noise</span></div>
-<div class="rrow"><span class="rl">2-element baseline, SNR 25 dB</span><span class="rv warn-text">&lt; 5° — minimum viable config, reduced accuracy</span></div>
-<div class="rrow"><span class="rl">UHF 433 MHz</span><span class="rv good-text">&lt; 2° — wavelength change handled correctly (steering vector recomputed)</span></div>
-<div class="rrow"><span class="rl">Confidence output</span><span class="rv">Confidence score derived from MUSIC peak sharpness — reported alongside azimuth</span></div>
+<div class="rrow"><span class="rl">5-element UCA, SNR 25 dB</span><span class="rv good-text"><strong>&lt; 2°</strong> RMS error — verified at 0° / 90° / 135° / 180° / 270° azimuths in unit tests</span></div>
+<div class="rrow"><span class="rl">5-element UCA, SNR 10 dB</span><span class="rv ok-text">&lt; 3° — still convergent at moderate noise; confidence score drops proportionally</span></div>
+<div class="rrow"><span class="rl">2-element minimum, SNR 25 dB</span><span class="rv warn-text">&lt; 5° — usable but with 180° ambiguity (left/right); 3+ elements recommended</span></div>
+<div class="rrow"><span class="rl">UHF (433 MHz)</span><span class="rv good-text">&lt; 2° — steering vector correctly recomputed for different wavelength</span></div>
+<div class="rrow"><span class="rl">Confidence score</span><span class="rv">0–1 derived from MUSIC peak-to-mean prominence; published alongside azimuth in DF_RESULT</span></div>
+<div class="rrow"><span class="rl">Sweep resolution</span><span class="rv">0.5° default (configurable). Finer resolution increases CPU linearly with no algorithm change.</span></div>
 </div>
 </section>
 
@@ -280,41 +411,61 @@ cd SdrScripts</code></pre>
 <section id="speech" class="repo">
 <div class="repo-hdr">
   <h2>SpeechApp — Voice Transcription <a href="https://github.com/BMichaud7/SpeechApp" class="rlink">↗</a></h2>
-  <span class="lang cpp">C++20 core</span>
+  <span class="lang cpp">C++20</span>
 </div>
-<p>Passively subscribes to <code>rf.demod</code> audio. Two-stage pipeline: energy VAD gates Whisper, then <strong>whisper.cpp</strong> (C++ GGML — no Python runtime) transcribes detected speech. Every detection is stored in SQLite and a rolling daily text log.</p>
+<p>Passive subscriber to <code>rf.demod</code> audio. Two-stage pipeline: an energy VAD gates Whisper inference (skipping silence and noise in &lt;1 ms), then <strong>whisper.cpp</strong> transcribes detected speech. No Python, no PyTorch at runtime — pure C++ GGML inference. All transcriptions are stored in SQLite and a rolling daily text log.</p>
+
 <div class="two-col">
-<div><h4>EnergyVad (&lt;1 ms)</h4><p>RMS energy gate in dBFS. Rejects silence, noise bursts, DTMF, tones. Only audio with speech-band energy passes to inference.</p></div>
-<div><h4>whisper.cpp</h4><p>GGML-quantised Whisper. CPU or CUDA. Auto language detection. Segment output to word boundaries. Runs on the same machine as the rest of the stack.</p></div>
+<div>
+<h4>EnergyVad — &lt;1 ms</h4>
+<p>RMS energy gate with configurable dBFS threshold. Rejects silence, broadband noise, DTMF, tones, and FSK/digital bursts that wouldn't contain intelligible speech. Only signals with voice-band energy pass to Whisper.</p>
+<p>Breakdown by SNR: VAD correctly detects speech at p=1.000 even at SNR 5 dB with 50 Hz AC hum and multipath dropouts.</p>
+</div>
+<div>
+<h4>whisper.cpp</h4>
+<p>GGML-quantised Whisper running as a native C++ library. Supports CPU (int8 quantisation) and CUDA (float16). Automatic language detection. Segments aligned to word boundaries. Runs on the same host as the rest of the stack with no additional services.</p>
+<p>Input is automatically resampled from any sample rate to 16 kHz (Whisper's native rate) using linear interpolation.</p>
+</div>
 </div>
 
 <div id="stt-acc" class="results">
-<h4>Measured STT performance</h4>
-<div class="rrow"><span class="rl">VAD at SNR 5 dB</span><span class="rv good-text"><strong>p = 1.000</strong> — voice detected through 50 Hz hum, 2 multipath dropouts</span></div>
-<div class="rrow"><span class="rl">Whisper base at SNR 20 dB</span><span class="rv good-text">Word-perfect: "SDR radio check. Alpha Bravo Charlie. Signal is weak but readable. How copy? Over."</span></div>
-<div class="rrow"><span class="rl">Whisper base at SNR 5 dB</span><span class="rv ok-text">"SBR video check, Alph Bravo Charlie, signal is weak but readable, how copy, over." — key info preserved, minor acronym / dropout errors</span></div>
-<div class="rrow"><span class="rl">Whisper base at SNR 0 dB</span><span class="rv warn-text">Heavy paraphrasing — meaning partially preserved, details unreliable</span></div>
-<div class="rrow"><span class="rl">Breakdown threshold</span><span class="rv bad-text">−6 dB SNR and below: hallucination (plausible-sounding but unrelated text)</span></div>
+<h4>Measured STT performance — Whisper base model</h4>
+<div class="rrow"><span class="rl">VAD sensitivity at SNR 5 dB</span><span class="rv good-text"><strong>p = 1.000</strong> — voice detected through 50 Hz hum + 2 multipath fades + AWGN at 5 dB SNR</span></div>
+<div class="rrow"><span class="rl">VAD sensitivity at SNR 20 dB</span><span class="rv good-text">p = 1.000 — no missed detections at any tested SNR above 5 dB</span></div>
+<div class="rrow"><span class="rl">Transcription at SNR 20 dB</span><span class="rv good-text">Word-perfect: <em>"SDR radio check. Alpha Bravo Charlie. Signal is weak but readable. How copy? Over."</em></span></div>
+<div class="rrow"><span class="rl">Transcription at SNR 10 dB</span><span class="rv good-text">Word-perfect with minor punctuation differences — all information preserved</span></div>
+<div class="rrow"><span class="rl">Transcription at SNR 5 dB</span><span class="rv ok-text"><em>"SBR video check, Alph Bravo Charlie, signal is weak but readable, how copy, over."</em> — key information preserved; acronym error + dropout on "Alpha" from 150ms fade</span></div>
+<div class="rrow"><span class="rl">Transcription at SNR 0 dB</span><span class="rv warn-text">Heavy paraphrasing — meaning partially preserved, individual words unreliable</span></div>
+<div class="rrow"><span class="rl">Transcription at −6 dB SNR</span><span class="rv bad-text">Hallucination — plausible-sounding but unrelated text; VAD still correctly detects speech-like energy</span></div>
 
-<h4>Model options</h4>
+<h4>Whisper model options</h4>
 <table>
-<thead><tr><th>Model</th><th>Size</th><th>CPU speed</th><th>Best for</th></tr></thead>
+<thead><tr><th>Model</th><th>Size</th><th>CPU speed</th><th>CUDA speed</th><th>Best for</th></tr></thead>
 <tbody>
-<tr><td>tiny.en</td><td>75 MB</td><td>~15× real-time</td><td>English-only, resource-constrained</td></tr>
-<tr><td>base.en</td><td>145 MB</td><td>~7× real-time</td><td>English-only, tested baseline above</td></tr>
-<tr><td>small</td><td>488 MB</td><td>~4× real-time</td><td>Multilingual deployments</td></tr>
-<tr><td>medium</td><td>1.5 GB</td><td>~2× real-time</td><td>Best practical accuracy</td></tr>
+<tr><td>tiny.en</td><td>75 MB</td><td>~15× real-time</td><td>~50× real-time</td><td>English-only, embedded/edge deployment</td></tr>
+<tr><td>base.en</td><td>145 MB</td><td>~7× real-time</td><td>~25× real-time</td><td>English-only — tested baseline above</td></tr>
+<tr><td>small</td><td>488 MB</td><td>~4× real-time</td><td>~15× real-time</td><td>Multilingual — good accuracy/speed balance</td></tr>
+<tr><td>medium</td><td>1.5 GB</td><td>~2× real-time</td><td>~8× real-time</td><td>Best practical accuracy for production use</td></tr>
+<tr><td>large-v3</td><td>3.1 GB</td><td>~0.5× real-time</td><td>~3× real-time</td><td>Maximum accuracy, GPU required</td></tr>
 </tbody>
 </table>
 
-<h4>Transcript storage</h4>
-<pre><code>-- Most recent transcriptions
-SELECT ts_utc, freq_mhz, modulation, language, text
-FROM transcripts ORDER BY ts_ms DESC LIMIT 20;
+<h4>Transcript storage and querying</h4>
+<pre><code>-- Recent transcriptions with metadata
+SELECT ts_utc, freq_mhz, modulation, language,
+       round(lang_prob::numeric,2) AS lang_confidence,
+       round(duration_s::numeric,1) AS dur_s, text
+FROM transcripts
+ORDER BY ts_ms DESC LIMIT 20;
 
--- All voice on a specific frequency
+-- Search by frequency band
 SELECT * FROM transcripts
-WHERE freq_hz BETWEEN 462e6 AND 463e6;</code></pre>
+WHERE freq_hz BETWEEN 462e6 AND 463e6
+  AND ts_ms > extract(epoch FROM now()-'1 hour'::interval)*1000;
+
+-- Language breakdown
+SELECT language, count(*), avg(lang_prob) FROM transcripts
+GROUP BY language ORDER BY count DESC;</code></pre>
 </div>
 </section>
 
@@ -324,52 +475,108 @@ WHERE freq_hz BETWEEN 462e6 AND 463e6;</code></pre>
   <h2>SdrScanner — Desktop GUI <a href="https://github.com/BMichaud7/SdrScanner" class="rlink">↗</a></h2>
   <span class="lang cpp">C++20 · Qt6</span>
 </div>
-<p>Cross-platform real-time spectrum viewer. Connects to the AMQP bus and subscribes to <code>rf.detections</code>. Builds on Linux (Qt6 via apt) and Windows (Qt6 via vcpkg). CI produces a Windows .zip artifact automatically.</p>
+<p>Cross-platform real-time spectrum viewer. Connects to the AMQP bus and subscribes to <code>rf.detections</code> for live display. Shows signal power, bandwidth, modulation class, and classification confidence. Builds on Linux (Qt6 via apt) and Windows (Qt6 via vcpkg). GitHub Actions CI produces a downloadable Windows .zip artifact on every push.</p>
+</section>
+
+<!-- ── Scripts ── -->
+<section id="scripts" class="repo">
+<div class="repo-hdr">
+  <h2>SdrScripts — Operations &amp; Deployment <a href="https://github.com/BMichaud7/SdrScripts" class="rlink">↗</a></h2>
+  <span class="lang bash">Bash · Podman</span>
+</div>
+<p>Container orchestration, hardware test configs, and deployment manifests. The main entry point for running the full stack.</p>
+<h4>scan.sh flags</h4>
+<table>
+<thead><tr><th>Flag</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td><code>--hw</code></td><td>Use physical SDR hardware (reads devices-direct-eth.xml)</td></tr>
+<tr><td><code>--no-analysis</code></td><td>Skip AnalysisApp — faster sweep cycle, lower CPU</td></tr>
+<tr><td><code>--demod</code></td><td>Start DemodApp — decodes signals classified by AnalysisApp</td></tr>
+<tr><td><code>--df</code></td><td>Start DfApp — bearing estimation from detections</td></tr>
+<tr><td><code>--temp-logger</code></td><td>Start SdrTempLogger — logs SDR hardware temperatures</td></tr>
+</tbody>
+</table>
+<p>scan.sh automatically purges the AMQP task queue on startup (prevents the backlog accumulation that occurs when the controller is offline while AcquisitionApp submits tasks). Kubernetes manifests for all components are included under <code>deploy/k8s/</code>.</p>
 </section>
 
 <!-- ── P25 ── -->
 <section id="p25">
-<h2>P25 / APCO-25 Trunked Monitoring</h2>
-<p>Full Phase 1 P25 pipeline — control channel decoding, talk-group filtering, automatic voice channel following.</p>
+<h2>P25 / APCO-25 Trunked System Monitoring</h2>
+<p>The stack implements an end-to-end Phase 1 P25 pipeline: control channel decoding, talk-group filtering, automatic voice channel following, and persistent grant logging. The entire pipeline runs without human intervention once configured.</p>
+
+<h4>How it works</h4>
 <div class="p25flow">
-  <div class="ps25"><div class="p25n">1</div><strong>Detect</strong><p>Acquisition finds C4FM energy: flat ~12.5 kHz BW, near-zero PAPR (constant-envelope modulation)</p></div>
+  <div class="ps25"><div class="p25n">1</div><strong>Detect</strong><p>AcquisitionApp finds C4FM energy at the control channel frequency — identified by near-zero PAPR and ~12.5 kHz flat spectral footprint</p></div>
   <div class="p25a">→</div>
-  <div class="ps25"><div class="p25n">2</div><strong>Decode</strong><p>P25Monitor fetches IQ at control channel, C4FM demodulates (4FSK 4800 sym/s), TSBK parser extracts grants</p></div>
+  <div class="ps25"><div class="p25n">2</div><strong>Decode</strong><p>P25Monitor in DemodApp fetches IQ at the control frequency. C4FM demodulator (4FSK 4800 sym/s, ±600/±1800 Hz) produces dibits. TSBK parser extracts grants.</p></div>
   <div class="p25a">→</div>
-  <div class="ps25"><div class="p25n">3</div><strong>Filter</strong><p>Configurable talk-group whitelist. Matching grants published to <code>rf.p25.grants</code></p></div>
+  <div class="ps25"><div class="p25n">3</div><strong>Filter</strong><p>Configurable talk-group whitelist. Grants for whitelisted TGs (or all TGs if whitelist is empty) are published to <code>rf.p25.grants</code></p></div>
   <div class="p25a">→</div>
-  <div class="ps25"><div class="p25n">4</div><strong>Follow</strong><p>Acquisition retunes to voice channel, captures IQ tagged with talk-group ID and scanner_id</p></div>
+  <div class="ps25"><div class="p25n">4</div><strong>Follow</strong><p>AcquisitionApp P25GrantConsumer submits a NARROWBAND task at the voice channel frequency. Captured IQ is tagged with the talk-group ID.</p></div>
   <div class="p25a">→</div>
-  <div class="ps25"><div class="p25n">5</div><strong>Store</strong><p>Grants logged to <code>p25_channels</code> PostgreSQL table with control channel flagged separately</p></div>
+  <div class="ps25"><div class="p25n">5</div><strong>Transcribe</strong><p>DemodApp demodulates voice (FM path for C4FM). SpeechApp VAD + Whisper transcribes. Stored in transcripts.db.</p></div>
 </div>
 
-<h4>Database schema</h4>
-<pre><code>SELECT role, freq_mhz, talk_group, grant_count, last_seen
+<h4>Configuration</h4>
+<pre><code>&lt;!-- scanner.xml — enable P25 voice following --&gt;
+&lt;p25&gt;
+  &lt;enabled&gt;true&lt;/enabled&gt;
+  &lt;grant_topic&gt;rf.p25.grants&lt;/grant_topic&gt;
+  &lt;capture_s&gt;4.0&lt;/capture_s&gt;
+  &lt;rank&gt;3&lt;/rank&gt;                    &lt;!-- highest priority — preempts sweeps --&gt;
+  &lt;tg_whitelist&gt;&lt;/tg_whitelist&gt;    &lt;!-- empty = follow all talk groups --&gt;
+&lt;/p25&gt;
+
+&lt;!-- demod.xml — P25 control channel decoder --&gt;
+&lt;p25&gt;
+  &lt;enabled&gt;true&lt;/enabled&gt;
+  &lt;control_freq_hz&gt;482662500&lt;/control_freq_hz&gt;
+  &lt;sample_rate_hz&gt;48000&lt;/sample_rate_hz&gt;
+  &lt;capture_s&gt;3.0&lt;/capture_s&gt;
+  &lt;grant_topic&gt;rf.p25.grants&lt;/grant_topic&gt;
+&lt;/p25&gt;</code></pre>
+
+<h4>Channel database</h4>
+<pre><code>-- All observed channels for the active site
+SELECT role, freq_mhz, talk_group, encrypted, emergency,
+       grant_count, last_seen
 FROM p25_site_channels;
 
- role  | freq_mhz | talk_group | grant_count | last_seen
--------+----------+------------+-------------+----------
- CTRL  | 482.663  |            |           1 | 20:14:33
- VOICE | 483.712  |       1001 |          47 | 20:14:31
- VOICE | 483.500  |       2003 |          12 | 20:12:08</code></pre>
+ role  | freq_mhz | talk_group | encrypted | grant_count | last_seen
+-------+----------+------------+-----------+-------------+----------
+ CTRL  | 482.663  |            | f         |           1 | 20:14:33
+ VOICE | 483.712  |       1001 | f         |          47 | 20:14:31
+ VOICE | 483.500  |       2003 | f         |          12 | 20:12:08
+ VOICE | 483.638  |       3005 | t         |           3 | 20:08:17</code></pre>
+
+<h4>TSBK opcodes decoded</h4>
+<table>
+<thead><tr><th>Opcode</th><th>Name</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td>0x00</td><td>GRP_V_CH_GRANT</td><td>Group voice channel grant → emit to rf.p25.grants</td></tr>
+<tr><td>0x04</td><td>IND_V_CH_GRANT</td><td>Individual voice channel grant → emit if unit ID in whitelist</td></tr>
+<tr><td>0x3D</td><td>IDEN_UP</td><td>Channel identifier → frequency map → enables frequency resolution</td></tr>
+<tr><td>0x3A</td><td>RFSS_STATUS_BCAST</td><td>Site identity (WACN, SYS_ID, RFSS_ID, SITE_ID) → stored in p25_channels</td></tr>
+</tbody>
+</table>
 </section>
 
 <!-- ── Protocols ── -->
 <section id="protos">
-<h2>All Supported Protocols</h2>
+<h2>Supported Protocols</h2>
 <div class="pgrid">
-  <div class="pc"><h4>P25 Phase 1</h4><span class="ptag">Public Safety</span><p>C4FM 4FSK, 9600 bps. Control channel decode, TSBK grants, voice follow. North American police, fire, EMS.</p></div>
-  <div class="pc"><h4>DMR</h4><span class="ptag">Commercial · Public Safety</span><p>4FSK TDMA, 9600 bps. MOTOTRBO, Hytera. Raw dibit output; AMBE+2 voice needs codec.</p></div>
-  <div class="pc"><h4>NXDN</h4><span class="ptag">Industrial</span><p>4FSK FDMA, 9600 bps, 12.5 kHz. Icom IDAS, Kenwood NEXEDGE. Manufacturing, utilities.</p></div>
-  <div class="pc"><h4>D-STAR</h4><span class="ptag">Amateur</span><p>GMSK 4800 bps, BT=0.5. Amateur digital voice and 1200 bps data. Worldwide repeater network.</p></div>
-  <div class="pc"><h4>TETRA</h4><span class="ptag">European Public Safety</span><p>π/4-DQPSK TDMA, 36 kbps, 25 kHz. Police, fire, rail transport across Europe.</p></div>
-  <div class="pc"><h4>AIS</h4><span class="ptag">Marine · Navigation</span><p>GMSK 9600 bps, NRZI+HDLC. Vessel ID and position on VHF ch 87B/88B. SOLAS mandatory.</p></div>
-  <div class="pc"><h4>POCSAG</h4><span class="ptag">Paging</span><p>2-FSK ±4500 Hz, 512/1200/2400 baud. Hospital paging, fire alerting, utility notifications.</p></div>
-  <div class="pc"><h4>ACARS</h4><span class="ptag">Aviation</span><p>AM-FSK 2400 bps, VHF 129–136 MHz. Aircraft datalink for clearances, weather, ATIS.</p></div>
-  <div class="pc"><h4>FM Broadcast</h4><span class="ptag">Broadcast</span><p>WB FM ±75 kHz, 87.5–108 MHz. Mono audio, 19 kHz stereo pilot, 38 kHz DSB-SC L-R.</p></div>
-  <div class="pc"><h4>AM / SSB</h4><span class="ptag">HF · Aviation</span><p>AM-DSB, USB, LSB. Aviation 118–136 MHz, shortwave, HF amateur, maritime.</p></div>
-  <div class="pc"><h4>APRS / AFSK</h4><span class="ptag">Amateur · IoT</span><p>Bell 202 1200 bps, 144.39 MHz. Position reporting, telemetry, messaging via packet radio.</p></div>
-  <div class="pc"><h4>CW / Morse</h4><span class="ptag">Amateur · Maritime</span><p>On-off keying. Amateur beacons, maritime station ID. Goertzel tone detector.</p></div>
+  <div class="pc"><h4>P25 Phase 1</h4><span class="ptag">Public Safety</span><p>C4FM 4FSK, 9600 bps. Control channel decode (TSBK), talk-group filtering, voice channel following. North American police, fire, EMS trunking.</p></div>
+  <div class="pc"><h4>DMR</h4><span class="ptag">Commercial · Public Safety</span><p>4FSK TDMA, 9600 bps, 12.5 kHz. MOTOTRBO, Hytera. Raw dibit output; AMBE+2 voice codec not included.</p></div>
+  <div class="pc"><h4>NXDN</h4><span class="ptag">Industrial</span><p>4FSK FDMA, 9600 bps, 12.5 kHz channel. Icom IDAS, Kenwood NEXEDGE. Manufacturing, utilities, transportation.</p></div>
+  <div class="pc"><h4>D-STAR</h4><span class="ptag">Amateur</span><p>GMSK 4800 bps, BT=0.5. Amateur digital voice and 1200 bps data. Global repeater network using icom hardware.</p></div>
+  <div class="pc"><h4>TETRA</h4><span class="ptag">European Public Safety</span><p>π/4-DQPSK TDMA, 36 kbps, 25 kHz. Standard for police, fire, rail transport across Europe and Middle East.</p></div>
+  <div class="pc"><h4>AIS</h4><span class="ptag">Marine · Navigation</span><p>GMSK 9600 bps, NRZI+HDLC framing. Vessel identification and position on VHF ch 87B (161.975 MHz) and 88B (162.025 MHz). SOLAS mandatory.</p></div>
+  <div class="pc"><h4>POCSAG</h4><span class="ptag">Paging</span><p>2-FSK ±4500 Hz, 512/1200/2400 baud (auto-detected). Hospital paging, fire alerting, utility field notifications. Alphanumeric decode.</p></div>
+  <div class="pc"><h4>ACARS</h4><span class="ptag">Aviation</span><p>AM-FSK 2400 bps (mark 2400 Hz / space 1200 Hz), VHF 129–136 MHz. Aircraft datalink for clearances, weather, ATIS. SOH/ETX message decode.</p></div>
+  <div class="pc"><h4>FM Broadcast</h4><span class="ptag">Broadcast</span><p>WB FM ±75 kHz deviation, 87.5–108 MHz. Mono audio, 19 kHz stereo pilot, 38 kHz DSB-SC L-R subcarrier.</p></div>
+  <div class="pc"><h4>AM / SSB</h4><span class="ptag">HF · Aviation</span><p>AM-DSB, AM-DSB-SC, USB, LSB. Aviation 118–136 MHz, HF shortwave 3–30 MHz, marine MF/HF.</p></div>
+  <div class="pc"><h4>APRS / AFSK</h4><span class="ptag">Amateur · IoT</span><p>Bell 202 AFSK, 1200 bps, 144.39 MHz. Packet radio for position reporting, weather stations, telemetry, and emergency messaging.</p></div>
+  <div class="pc"><h4>CW / Morse</h4><span class="ptag">Amateur · Maritime</span><p>On-off keying with 400 Hz sidetone. Amateur station beacons, maritime NAVTEX, CW contest exchanges.</p></div>
 </div>
 </section>
 
@@ -379,31 +586,60 @@ FROM p25_site_channels;
   <h2>SdrSdk <a href="https://github.com/BMichaud7/SdrSdk" class="rlink">↗</a></h2>
   <span class="lang cpp">C++20</span>
 </div>
-<p>C++ library for writing SDR applications without touching AMQP or raw socket internals. Wraps task submission, IQ streaming, and spectrum analysis into a clean API with physical-unit safety via <a href="https://github.com/aurora-opensource/au">Au units</a>.</p>
+<p>C++ client library for writing SDR applications without touching AMQP internals, raw sockets, or task scheduling. Provides a clean API for task submission, IQ streaming, and spectrum analysis. Physical quantities use the <a href="https://github.com/aurora-opensource/au">Au units library</a> — frequency, bandwidth, and duration parameters are type-checked at compile time.</p>
 <pre><code>#include &lt;sdrsdk/sdrsdk.hpp&gt;
 #include &lt;au/units/hertz.hh&gt;
+#include &lt;au/units/seconds.hh&gt;
 
 sdr::SdrClient client("amqp://localhost:5672");
 client.connect();
 
-// Capture 3 s at 462.5 MHz, 48 kHz SR
-auto resp = client.narrowband(au::hertz(462.5e6), au::hertz(12.5e3),
-                               au::hertz(48e3), au::seconds(3.0));
+// Submit a 3-second NARROWBAND capture at 462.5 MHz
+auto resp = client.narrowband(
+    au::hertz(462.5e6),   // centre frequency
+    au::hertz(12.5e3),    // bandwidth
+    au::hertz(48e3),      // sample rate
+    au::seconds(3.0));    // duration
 
+// Receive IQ via UDP
 sdr::IqStream stream(resp.streams[0].udp_port);
 auto iq = stream.collect_complex_for(au::seconds(3.0));
+client.stop(resp.task_id);
 
 // Analyse
 sdr::Spectrum spec(4096);
-auto sigs = spec.analyse(iq, au::hertz(462.5e6), au::hertz(48e3));
-for (auto& s : sigs)
-    std::cout &lt;&lt; s.freq.in(au::mega(au::hertz)) &lt;&lt; " MHz\n";</code></pre>
+auto signals = spec.analyse(iq, au::hertz(462.5e6), au::hertz(48e3));
+for (auto& s : signals)
+    std::cout &lt;&lt; s.freq.in(au::mega(au::hertz)) &lt;&lt; " MHz  " &lt;&lt; s.type &lt;&lt; "\n";</code></pre>
+
+<h4>Task types available via SdrSdk</h4>
+<table>
+<thead><tr><th>Method</th><th>Task type</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>narrowband()</code></td><td>NARROWBAND</td><td>Fixed-frequency IQ capture for a specified duration</td></tr>
+<tr><td><code>wideband()</code></td><td>WIDEBAND</td><td>Continuous IQ stream until stopped</td></tr>
+<tr><td><code>scan(entries, repeat)</code></td><td>SCAN</td><td>Multi-step frequency sweep</td></tr>
+<tr><td><code>triggered()</code></td><td>TRIGGERED</td><td>Wait for power threshold, then capture</td></tr>
+<tr><td><code>snapshot()</code></td><td>SNAPSHOT</td><td>Synchronous single-shot FFT snapshot</td></tr>
+</tbody>
+</table>
+</section>
+
+<section id="taskapi" class="repo">
+<div class="repo-hdr">
+  <h2>SdrTaskApi <a href="https://github.com/BMichaud7/SdrTaskApi" class="rlink">↗</a></h2>
+  <span class="lang cpp">C++20</span>
+</div>
+<p>Shared message type library used by every C++ component. Defines the canonical <code>TaskRequest</code>, <code>TaskRecord</code>, <code>AssignedStream</code>, and <code>MessageCodec</code> types. All components consume this as a sibling-directory dependency via CMake <code>add_subdirectory()</code>. Physical quantities (frequency, sample rate, duration) use <a href="https://github.com/aurora-opensource/au">Au units</a> to prevent unit mismatches at compile time.</p>
+<pre><code>// Au units catch errors the compiler would otherwise miss:
+// task.rf.center_freq_hz = 462.5e6;          // raw double — silently wrong unit
+task.rf.center_freq_hz = au::hertz(462.5e6); // Au quantity — type-checked</code></pre>
 </section>
 
 </main>
 
 <footer>
-  <p>Open RF Stack · <a href="https://github.com/BMichaud7">github.com/BMichaud7</a> · 11 repositories · All CI passing · SoapySDR-compatible</p>
+  <p>Open RF Stack · <a href="https://github.com/BMichaud7">github.com/BMichaud7</a> · 12 repositories · All CI passing · SoapySDR-compatible · C++20 · AMQP 1.0</p>
 </footer>
 
 <script src="app.js"></script>

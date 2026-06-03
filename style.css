@@ -146,3 +146,18 @@ footer a{color:var(--blue)}
   .pipeline,.p25flow{flex-direction:column}
   .drow{flex-direction:column}
 }
+
+/* class grid for modulation classes */
+.class-grid{display:flex;flex-direction:column;gap:.5rem;margin:.8rem 0}
+.cg-group{background:var(--bg2);border:1px solid var(--bd);border-radius:6px;padding:.7rem 1rem;font-size:.87rem}
+.cg-group strong{color:#fff;margin-right:.5rem}
+.cg-group span{color:var(--muted)}
+
+/* fix sidebar — currently scrolling with page on some browsers */
+#nav{position:fixed;top:0;left:0;width:var(--nav);height:100vh;
+  background:var(--bg2);border-right:1px solid var(--bd);
+  overflow-y:auto;padding-top:1.5rem;z-index:100}
+#nav a,#nav .nav-sep{display:block;padding:.28rem 1.2rem}
+#nav a{color:var(--muted);text-decoration:none;border-left:2px solid transparent;transition:.12s;font-size:.85rem}
+#nav a:hover,#nav a.active{color:var(--blue);border-left-color:var(--blue);background:rgba(88,166,255,.07)}
+.nav-sep{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--bd);padding-top:.7rem;padding-bottom:.1rem}
