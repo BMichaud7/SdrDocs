@@ -1,37 +1,30 @@
 'use strict';
 
-const links = document.querySelectorAll('#nav a');
-
-// Collect all nav targets — sections AND named divs/anchors
-function getTargets() {
-  return [...links].map(l => {
-    const id = l.getAttribute('href').slice(1);
-    return { link: l, el: document.getElementById(id) };
-  }).filter(t => t.el);
+// Collect all nav link targets in document order
+function allTargets() {
+  return [...document.querySelectorAll('#nav a')].map(a => ({
+    a,
+    el: document.getElementById(a.getAttribute('href').replace('#', ''))
+  })).filter(t => t.el);
 }
 
-// Highlight whichever target's top is closest to (but above) 30% down the viewport
-function updateActive() {
-  const cutoff = window.scrollY + window.innerHeight * 0.30;
-  const targets = getTargets();
+function setActive() {
+  const scrollY = window.scrollY;
+  const threshold = 120; // px from top to consider "active"
+  const targets = allTargets();
 
-  let active = null;
+  let current = targets[0];
   for (const t of targets) {
-    if (t.el.getBoundingClientRect().top + window.scrollY <= cutoff) {
-      active = t;
+    if (t.el.getBoundingClientRect().top + scrollY <= scrollY + threshold) {
+      current = t;
     }
   }
 
-  links.forEach(l => l.classList.remove('active'));
-  if (active) active.link.classList.add('active');
+  document.querySelectorAll('#nav a').forEach(a => a.classList.remove('active'));
+  if (current) current.a.classList.add('active');
 }
 
-window.addEventListener('scroll', updateActive, { passive: true });
-updateActive(); // run on load
-
-// Smooth scroll on nav click
-links.forEach(l => l.addEventListener('click', e => {
-  e.preventDefault();
-  const el = document.getElementById(l.getAttribute('href').slice(1));
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}));
+// Native browser anchors handle the scrolling — JS only manages active class
+window.addEventListener('scroll', setActive, { passive: true });
+window.addEventListener('load', setActive);
+setActive();
