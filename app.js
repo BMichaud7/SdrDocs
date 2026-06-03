@@ -1,23 +1,37 @@
 'use strict';
+
 const links = document.querySelectorAll('#nav a');
 
-// Observe both sections AND named result divs
-const targets = document.querySelectorAll('section[id], div[id]');
-const obs = new IntersectionObserver(entries => {
-  entries.forEach(entry => {
-    if (entry.isIntersecting) {
-      const id = entry.target.id;
-      links.forEach(l => l.classList.remove('active'));
-      const match = document.querySelector(`#nav a[href="#${id}"]`);
-      if (match) match.classList.add('active');
+// Collect all nav targets — sections AND named divs/anchors
+function getTargets() {
+  return [...links].map(l => {
+    const id = l.getAttribute('href').slice(1);
+    return { link: l, el: document.getElementById(id) };
+  }).filter(t => t.el);
+}
+
+// Highlight whichever target's top is closest to (but above) 30% down the viewport
+function updateActive() {
+  const cutoff = window.scrollY + window.innerHeight * 0.30;
+  const targets = getTargets();
+
+  let active = null;
+  for (const t of targets) {
+    if (t.el.getBoundingClientRect().top + window.scrollY <= cutoff) {
+      active = t;
     }
-  });
-}, { rootMargin: '-15% 0px -65% 0px' });
+  }
 
-targets.forEach(t => obs.observe(t));
+  links.forEach(l => l.classList.remove('active'));
+  if (active) active.link.classList.add('active');
+}
 
+window.addEventListener('scroll', updateActive, { passive: true });
+updateActive(); // run on load
+
+// Smooth scroll on nav click
 links.forEach(l => l.addEventListener('click', e => {
   e.preventDefault();
-  const target = document.querySelector(l.getAttribute('href'));
-  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const el = document.getElementById(l.getAttribute('href').slice(1));
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }));

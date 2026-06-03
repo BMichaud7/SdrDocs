@@ -25,6 +25,7 @@ header{background:linear-gradient(135deg,#1a1f2e,#0d1117);border-bottom:1px soli
 main{margin-left:var(--nav);padding:2.5rem 3rem 5rem;max-width:calc(960px + var(--nav))}
 section{padding:2.5rem 0;border-bottom:1px solid var(--bd)}
 h2{font-size:1.5rem;color:#fff;margin-bottom:1rem;scroll-margin-top:2rem}
+div[id]{scroll-margin-top:2rem}
 h3{font-size:1.05rem;color:#fff;margin:.8rem 0 .4rem}
 h4{font-size:.85rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:1.4rem 0 .6rem}
 p{margin-bottom:.8rem;color:var(--tx)}
