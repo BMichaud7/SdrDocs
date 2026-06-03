@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SDR Pipeline — System Documentation</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <h1>🛰️ SDR Signal Intelligence Pipeline</h1>
+    <p class="subtitle">Open-source software-defined radio stack for signal acquisition, classification, demodulation, direction-finding, and speech transcription.</p>
+    <div class="badges">
+      <a href="https://github.com/BMichaud7" class="badge github">GitHub ↗</a>
+      <span class="badge">C++20</span>
+      <span class="badge">PlutoSDR</span>
+      <span class="badge">APCO-25</span>
+    </div>
+  </div>
+</header>
+
+<nav id="sidebar">
+  <div class="nav-section">
+    <span class="nav-label">Overview</span>
+    <a href="#architecture">Architecture</a>
+    <a href="#quickstart">Quick Start</a>
+    <a href="#flow">Data Flow</a>
+  </div>
+  <div class="nav-section">
+    <span class="nav-label">Repositories</span>
+    <a href="#sdrtaskapi">SdrTaskApi</a>
+    <a href="#sdrsdk">SdrSdk</a>
+    <a href="#sdrsourcemanager">SdrResourceManager</a>
+    <a href="#acquisitionapp">AcquisitionApp</a>
+    <a href="#analysisapp">AnalysisApp</a>
+    <a href="#demodapp">DemodApp</a>
+    <a href="#dfapp">DfApp</a>
+    <a href="#speechapp">SpeechApp</a>
+    <a href="#sdrscripts">SdrScripts</a>
+    <a href="#sdrscanner">SdrScanner</a>
+    <a href="#sdridentity">SdrIdentity</a>
+  </div>
+  <div class="nav-section">
+    <span class="nav-label">Protocols</span>
+    <a href="#p25">P25 / APCO-25</a>
+    <a href="#protocols">All Protocols</a>
+  </div>
+  <div class="nav-section">
+    <span class="nav-label">ML / AI</span>
+    <a href="#ml">Signal Classification</a>
+    <a href="#speech">Speech Transcription</a>
+  </div>
+</nav>
+
+<main>
+
+<!-- ── Architecture ─────────────────────────────────────────────────────── -->
+<section id="architecture">
+  <h2>System Architecture</h2>
+  <p>The pipeline transforms raw RF energy from one or more PlutoSDRs into structured intelligence — classified signals, decoded messages, direction fixes, and speech transcripts — all published over AMQP.</p>
+
+  <div class="arch-diagram">
+    <div class="arch-row">
+      <div class="arch-box hw">🔌 PlutoSDR<br><small>70 MHz – 6 GHz</small></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box core">SdrResourceManager<br><small>Task scheduler + IQ router</small></div>
+      <div class="arch-arrow">→ UDP CF32</div>
+      <div class="arch-box core">AcquisitionApp<br><small>FFT · CFAR · Persistence</small></div>
+    </div>
+    <div class="arch-row">
+      <div class="arch-spacer"></div>
+      <div class="arch-arrow down">↓ rf.detections</div>
+    </div>
+    <div class="arch-row multi">
+      <div class="arch-box app">AnalysisApp<br><small>Feature extraction + ONNX classifier</small></div>
+      <div class="arch-box app">DemodApp<br><small>FM·AM·DMR·P25·AIS·POCSAG…</small></div>
+      <div class="arch-box app">DfApp<br><small>MUSIC direction finding</small></div>
+    </div>
+    <div class="arch-row">
+      <div class="arch-arrow down">↓ rf.demod (audio)</div>
+    </div>
+    <div class="arch-row">
+      <div class="arch-box app">SpeechApp<br><small>Silero-VAD + Whisper STT</small></div>
+      <div class="arch-arrow">→ SQLite + daily log</div>
+      <div class="arch-box store">transcripts.db<br><small>Persistent transcript store</small></div>
+    </div>
+    <div class="arch-row">
+      <div class="arch-box bus amqp">ActiveMQ Artemis<br><small>AMQP 1.0 message bus</small></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Quick Start ───────────────────────────────────────────────────────── -->
+<section id="quickstart">
+  <h2>Quick Start</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>Clone the stack</h3>
+        <pre><code>git clone https://github.com/BMichaud7/SdrScripts
+cd SdrScripts</code></pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Plug in a PlutoSDR via USB or Ethernet</h3>
+        <p>Update <code>hw-test/devices-direct-eth.xml</code> with your device's IP address.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Start scanning</h3>
+        <pre><code>./scan.sh --hw --no-analysis</code></pre>
+        <p>Launches Artemis, the controller, and AcquisitionApp. Detections stream to <code>rf.detections</code>.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Enable full pipeline</h3>
+        <pre><code>./scan.sh --hw --demod --df</code></pre>
+        <p>Adds DemodApp (voice decode) and DfApp (bearing estimation) to the pipeline.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Data Flow ─────────────────────────────────────────────────────────── -->
+<section id="flow">
+  <h2>AMQP Message Flow</h2>
+  <table class="flow-table">
+    <thead><tr><th>Topic / Queue</th><th>Publisher</th><th>Consumers</th><th>Schema</th></tr></thead>
+    <tbody>
+      <tr><td><code>sdr.task.request</code></td><td>AcquisitionApp, DemodApp</td><td>SdrResourceManager</td><td>TASK_REQUEST_SCAN / NARROWBAND</td></tr>
+      <tr><td><code>sdr.task.response</code></td><td>SdrResourceManager</td><td>AcquisitionApp, DemodApp</td><td>TASK_ACCEPTED / REJECTED</td></tr>
+      <tr><td><code>rf.detections</code></td><td>AcquisitionApp</td><td>AnalysisApp, DemodApp, DfApp, P25Monitor</td><td>RF_DETECTION JSON</td></tr>
+      <tr><td><code>rf.analysis</code></td><td>AnalysisApp</td><td>DemodApp</td><td>ANALYSIS_RESULT JSON</td></tr>
+      <tr><td><code>rf.demod</code></td><td>DemodApp</td><td>SpeechApp</td><td>DEMOD_RESULT (pcm_f32le base64)</td></tr>
+      <tr><td><code>rf.df_results</code></td><td>DfApp</td><td>—</td><td>DF_RESULT (bearing, confidence)</td></tr>
+      <tr><td><code>rf.p25.grants</code></td><td>DemodApp P25Monitor</td><td>AcquisitionApp P25GrantConsumer</td><td>P25_CHANNEL_GRANT JSON</td></tr>
+      <tr><td><code>rf.speech</code></td><td>SpeechApp (future)</td><td>—</td><td>SPEECH_RESULT JSON</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ── Repos ──────────────────────────────────────────────────────────────── -->
+<section id="sdrtaskapi" class="repo-section">
+  <div class="repo-header">
+    <h2>SdrTaskApi <a href="https://github.com/BMichaud7/SdrTaskApi" class="repo-link">↗</a></h2>
+    <span class="lang cpp">C++20</span>
+  </div>
+  <p class="repo-desc">Shared message types and serialisation layer used by every component in the stack. Defines <code>TaskRequest</code>, <code>TaskRecord</code>, <code>AssignedStream</code>, and the JSON codec.</p>
+  <div class="repo-meta">
+    <span>📦 Static library</span>
+    <span>🔗 Used by all other C++ repos via add_subdirectory()</span>
+  </div>
+  <h4>Key types</h4>
+  <ul>
+    <li><code>TaskRequest</code> — SCAN / NARROWBAND / WIDEBAND / TRIGGERED task</li>
+    <li><code>TaskRecord</code> — lifecycle tracking (PENDING → RUNNING → COMPLETED)</li>
+    <li><code>MessageCodec</code> — nlohmann/json ↔ struct serialisation</li>
+  </ul>
+</section>
+
+<section id="sdrsdk" class="repo-section">
+  <div class="repo-header">
+    <h2>SdrSdk <a href="https://github.com/BMichaud7/SdrSdk" class="repo-link">↗</a></h2>
+    <span class="lang cpp">C++20</span>
+  </div>
+  <p class="repo-desc">High-level C++ SDK wrapping the AMQP task API and UDP IQ streaming. Write SDR applications without touching proton internals or raw sockets.</p>
+  <pre class="code-example"><code>sdr::SdrClient client;
+client.connect();
+auto resp = client.narrowband(au::hertz(476.5e6), au::hertz(2e6),
+                               au::hertz(2e6), au::seconds(3.0));
+sdr::IqStream stream(resp.streams[0].udp_port);
+auto samples = stream.collect_complex(200'000);</code></pre>
+</section>
+
+<section id="sdrsourcemanager" class="repo-section">
+  <div class="repo-header">
+    <h2>SdrResourceManager <a href="https://github.com/BMichaud7/SdrResourceManager" class="repo-link">↗</a></h2>
+    <span class="lang cpp">C++20</span>
+  </div>
+  <p class="repo-desc">The broker between software components and physical SDR hardware. Manages task scheduling, preemption by rank, and UDP IQ streaming to multiple consumers simultaneously.</p>
+  <div class="feature-grid">
+    <div class="feature"><strong>Trunked scheduling</strong><br>Rank-based preemption (1=Acq &lt; 2=Analysis &lt; 3=DF)</div>
+    <div class="feature"><strong>Shared LO</strong><br>Two tasks at the same frequency share one hardware channel</div>
+    <div class="feature"><strong>IndepLo</strong><br>Two tasks at different frequencies run simultaneously</div>
+    <div class="feature"><strong>Fan-out</strong><br>One IQ stream → multiple subscribers via sub-band decomposition</div>
+  </div>
+</section>
+
+<section id="acquisitionapp" class="repo-section">
+  <div class="repo-header">
+    <h2>AcquisitionApp <a href="https://github.com/BMichaud7/AcquisitionApp" class="repo-link">↗</a></h2>
+    <span class="lang cpp">C++20</span>
+    <span class="badge green">64 tests</span>
+  </div>
+  <p class="repo-desc">Continuous spectrum scanner. Submits frequency-sweep tasks, receives CF32 IQ over UDP, runs Welch FFT + CA-CFAR detection, and publishes detections to <code>rf.detections</code>. Includes a <strong>P25 grant consumer</strong> that retunes to voice channels on channel grants.</p>
+  <h4>Detection pipeline</h4>
+  <ol>
+    <li><strong>Welch averaging</strong> — reduces noise variance by ~18 dB vs single FFT</li>
+    <li><strong>CA-CFAR</strong> — O(N) prefix-sum, adapts to local noise floor</li>
+    <li><strong>Persistence filter</strong> — requires ≥2 consecutive detections; strong signals bypass</li>
+    <li><strong>Sub-bin interpolation</strong> — 3-point parabola, ~1-2 kHz accuracy</li>
+  </ol>
+  <h4>P25 voice following</h4>
+  <p>When DemodApp publishes a P25 channel grant on <code>rf.p25.grants</code>, AcquisitionApp tunes to the voice channel, captures IQ, and publishes detections tagged with the talk group ID.</p>
+</section>
+
+<section id="analysisapp" class="repo-section">
+  <div class="repo-header">
+    <h2>AnalysisApp <a href="https://github.com/BMichaud7/AnalysisApp" class="repo-link">↗</a></h2>
+    <span class="lang cpp">C++20</span>
+    <span class="badge green">33 tests</span>
+  </div>
+  <p class="repo-desc">RF signal auto-identification service. Classifies every detection using a two-path approach: fast ONNX inference on the embedded IQ snapshot, then slow feature extraction + rule engine for edge cases.</p>
+  <div class="two-col">
+    <div>
+      <h4>Fast path (~5 ms)</h4>
+      <p>28-class ResNet runs on the 1024-sample IQ snapshot embedded in <code>RF_DETECTION</code>. No SDR re-acquisition needed.</p>
+    </div>
+    <div>
+      <h4>Slow path (~80 ms)</h4>
+      <p>Requests 65k samples via NARROWBAND task. Extracts cumulants, OFDM CP, FM deviation, chirp rate. Feeds into rule engine + ONNX.</p>
+    </div>
+  </div>
+  <h4>ML model</h4>
+  <p>36-class RadioResNet (C4FM, DMR, NXDN, D-STAR, TETRA, AIS, POCSAG, ACARS + original 28 classes). Trained on 922k synthetic samples with ±0.3% post-AFC frequency offset and hardware impairments.</p>
+</section>
+
+<section id="demodapp" class="repo-section">
+  <div class="repo-header">
+    <h2>DemodApp <a href="https://github.com/BMichaud7/DemodApp" class="repo-link">↗</a></h2>
+    <span class="lang cpp">C++20</span>
+    <span class="badge green">CI passing</span>
+  </div>
+  <p class="repo-desc">Demodulates classified signals and publishes decoded content to <code>rf.demod</code>. All demodulators use <a href="https://liquidsdr.org">liquid-dsp</a> for the physical layer.</p>
+
+  <table class="demod-table">
+    <thead><tr><th>Modulation</th><th>Output</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>FM_WB / FM_NB</td><td>PCM audio</td><td>FM broadcast, voice radio</td></tr>
+      <tr><td>AM_DSB, AM_SSB</td><td>PCM audio</td><td>Shortwave, aviation</td></tr>
+      <tr><td>P25 / P25_C4FM</td><td>PCM audio</td><td>Public safety; IMBE decode future</td></tr>
+      <tr><td>DMR</td><td>Raw dibits</td><td>MOTOTRBO, Hytera; AMBE+2 future</td></tr>
+      <tr><td>NXDN</td><td>Raw dibits</td><td>Icom IDAS, Kenwood NEXEDGE</td></tr>
+      <tr><td>D-STAR</td><td>Raw bits</td><td>Amateur digital voice</td></tr>
+      <tr><td>AIS</td><td>NRZI+HDLC decoded</td><td>Marine VHF, vessel tracking</td></tr>
+      <tr><td>POCSAG</td><td>Alphanumeric text</td><td>Paging, hospital dispatch</td></tr>
+      <tr><td>ACARS</td><td>SOH/ETX message</td><td>Aircraft datalink</td></tr>
+      <tr><td>FSK / AFSK / CW</td><td>Bits / audio</td><td>Amateur, APRS, Morse</td></tr>
+      <tr><td>PSK / QAM / ASK</td><td>Raw bits</td><td>Digital data modes</td></tr>
+    </tbody>
+  </table>
+
+  <h4>P25 control channel decoder</h4>
+  <p><code>P25Monitor</code> continuously decodes the trunked control channel: extracts channel grants from TSBKs, filters by talk-group whitelist, and publishes grants to <code>rf.p25.grants</code>.</p>
+</section>
+
+<section id="dfapp" class="repo-section">
+  <div class="repo-header">
+    <h2>DfApp <a href="https://github.com/BMichaud7/DfApp" class="repo-link">↗</a></h2>
+    <span class="lang cpp">C++20</span>
+  </div>
+  <p class="repo-desc">Direction finding using the <strong>MUSIC algorithm</strong> (Multiple Signal Classification). Aggregates IQ snapshots from multiple PlutoSDRs sharing a common LO reference, computes the covariance matrix, and extracts bearing via eigendecomposition.</p>
+  <div class="formula">azimuth = argmax<sub>θ</sub> { 1 / (a(θ)ᴴ E<sub>N</sub> E<sub>N</sub>ᴴ a(θ)) }</div>
+  <p>Requires ≥ 2 antennas. 5-element UCA gives ±2° accuracy at SNR &gt; 10 dB. Results published to <code>rf.df_results</code>.</p>
+</section>
+
+<section id="speechapp" class="repo-section">
+  <div class="repo-header">
+    <h2>SpeechApp <a href="https://github.com/BMichaud7/SpeechApp" class="repo-link">↗</a></h2>
+    <span class="lang cpp">C++20 (core)</span>
+  </div>
+  <p class="repo-desc">Passive RF speech detection and transcription. Subscribes to <code>rf.demod</code>, applies energy-based VAD, then transcribes detected speech with <strong>whisper.cpp</strong>. Writes to a rolling SQLite database and daily text logs.</p>
+  <div class="two-col">
+    <div>
+      <h4>VAD — EnergyVad</h4>
+      <p>RMS energy gate (&lt;1 ms). Skips Whisper for silence, noise bursts, and DTMF. Threshold configurable via XML.</p>
+    </div>
+    <div>
+      <h4>STT — whisper.cpp</h4>
+      <p>GGML Whisper (base.en / small / medium). CPU + CUDA. Auto-detects language. Segments aligned to word boundaries.</p>
+    </div>
+  </div>
+  <pre class="code-example"><code>┌─ SPEECH  482.663 MHz  P25  (lang=en p=0.94)
+│  Units 4 and 7 respond to the intersection of Main and Elm.
+└─</code></pre>
+  <h4>Transcript storage</h4>
+  <pre class="code-example"><code>-- Query recent speech on PD frequency
+SELECT ts_utc, text FROM transcripts
+WHERE freq_hz BETWEEN 482.5e6 AND 483e6
+ORDER BY ts_ms DESC LIMIT 20;</code></pre>
+</section>
+
+<section id="sdrscripts" class="repo-section">
+  <div class="repo-header">
+    <h2>SdrScripts <a href="https://github.com/BMichaud7/SdrScripts" class="repo-link">↗</a></h2>
+    <span class="lang bash">Bash</span>
+  </div>
+  <p class="repo-desc">Orchestration scripts and hardware test configurations. <code>scan.sh</code> manages the full stack lifecycle via Podman containers.</p>
+  <pre class="code-example"><code>./scan.sh --hw                     # basic scan, PlutoSDR via ETH
+./scan.sh --hw --demod --df        # full pipeline
+./scan.sh --hw --no-analysis       # faster, no ML classification
+
+# Tewksbury MA P25 + analog:
+# Use hw-test/scanner-tewksbury.xml for targeted P25 scan</code></pre>
+  <p><strong>Note:</strong> <code>scan.sh</code> auto-purges the AMQP task queue on startup — prevents the "44k stale task" deadlock that occurs after long sessions.</p>
+</section>
+
+<section id="sdrscanner" class="repo-section">
+  <div class="repo-header">
+    <h2>SdrScanner <a href="https://github.com/BMichaud7/SdrScanner" class="repo-link">↗</a></h2>
+    <span class="lang cpp">C++20 / Qt6</span>
+  </div>
+  <p class="repo-desc">Cross-platform desktop GUI for real-time spectrum monitoring. Displays Welch spectrum, signal detections, and classification results. Connects to the AMQP bus to subscribe to <code>rf.detections</code>.</p>
+  <p>Builds on Linux (Qt6 apt) and Windows (Qt6 via vcpkg). CI produces a Windows .zip artifact.</p>
+</section>
+
+<section id="sdridentity" class="repo-section">
+  <div class="repo-header">
+    <h2>SdrIdentity <a href="https://github.com/BMichaud7/SdrIdentity" class="repo-link">↗</a></h2>
+    <span class="lang bash">Shell / Alpine</span>
+  </div>
+  <p class="repo-desc">Boot-time identity assignment for Tezuka/PlutoSDR fleet devices. All nodes boot with the same default hostname (<code>pluto</code>). This assigns each device a unique hostname by matching its MAC address against <code>config.xml</code>, then updates mDNS so the device is reachable as <code>sdr-N.local</code>.</p>
+</section>
+
+<!-- ── P25 Section ─────────────────────────────────────────────────────────── -->
+<section id="p25">
+  <h2>P25 / APCO-25 Support</h2>
+  <p>The stack implements end-to-end P25 Phase 1 monitoring. The pipeline for Tewksbury MA public safety radio (482.6625 MHz control, NAC 851):</p>
+
+  <div class="p25-flow">
+    <div class="p25-step">
+      <div class="p25-num">1</div>
+      <strong>Scan</strong>
+      <p>AcquisitionApp sweeps 480–490 MHz, detects P25 C4FM energy (low PAPR, ~12.5 kHz BW)</p>
+    </div>
+    <div class="p25-arrow">→</div>
+    <div class="p25-step">
+      <div class="p25-num">2</div>
+      <strong>Decode</strong>
+      <p>DemodApp P25Monitor fetches IQ at control freq, C4FM demodulates, parses TSBKs</p>
+    </div>
+    <div class="p25-arrow">→</div>
+    <div class="p25-step">
+      <div class="p25-num">3</div>
+      <strong>Grant</strong>
+      <p>Channel grant (TG + voice freq) published to <code>rf.p25.grants</code></p>
+    </div>
+    <div class="p25-arrow">→</div>
+    <div class="p25-step">
+      <div class="p25-num">4</div>
+      <strong>Follow</strong>
+      <p>AcquisitionApp tunes to voice channel, captures IQ, publishes detection tagged <code>tg&lt;N&gt;</code></p>
+    </div>
+    <div class="p25-arrow">→</div>
+    <div class="p25-step">
+      <div class="p25-num">5</div>
+      <strong>Transcribe</strong>
+      <p>SpeechApp receives FM-demodulated audio, Whisper transcribes, stores in SQLite</p>
+    </div>
+  </div>
+
+  <p>Known Tewksbury MA frequencies:</p>
+  <table class="freq-table">
+    <thead><tr><th>Frequency</th><th>Callsign</th><th>Description</th><th>Mode</th></tr></thead>
+    <tbody>
+      <tr class="ctrl"><td>482.6625 MHz</td><td>WIJ444</td><td>Tewksbury PD — Primary (control)</td><td>P25</td></tr>
+      <tr><td>483.5000 MHz</td><td>WPMB879</td><td>Tewksbury PD2 — Secondary</td><td>P25e</td></tr>
+      <tr><td>483.7125 MHz</td><td>WIL204</td><td>Tewksbury FD — Operations</td><td>P25</td></tr>
+      <tr><td>483.6375 MHz</td><td>WIL204</td><td>Tewksbury FD2 — Secondary</td><td>P25</td></tr>
+      <tr><td>484.3875 MHz</td><td>WIL204</td><td>Tewksbury FD — Fireground</td><td>FM</td></tr>
+      <tr><td>158.820 MHz</td><td>KUL830</td><td>Tewksbury EMA</td><td>FMN</td></tr>
+      <tr><td>460.3625 MHz</td><td>WQJS451</td><td>Tewksbury DPW</td><td>FMN</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ── Protocols ───────────────────────────────────────────────────────────── -->
+<section id="protocols">
+  <h2>Supported Protocols</h2>
+  <div class="protocol-grid">
+    <div class="protocol-card">
+      <h4>P25 Phase 1</h4>
+      <span class="proto-tag">Public Safety</span>
+      <p>C4FM 4FSK, 9600 bps. Control channel decode, TSBK parsing, talk group following.</p>
+    </div>
+    <div class="protocol-card">
+      <h4>DMR</h4>
+      <span class="proto-tag">Commercial / Public Safety</span>
+      <p>4FSK TDMA, 9600 bps. MOTOTRBO, Hytera. Raw dibit output; AMBE+2 future.</p>
+    </div>
+    <div class="protocol-card">
+      <h4>NXDN</h4>
+      <span class="proto-tag">Industrial</span>
+      <p>4FSK FDMA, 9600 bps. Icom IDAS, Kenwood NEXEDGE. 12.5 kHz channel.</p>
+    </div>
+    <div class="protocol-card">
+      <h4>D-STAR</h4>
+      <span class="proto-tag">Amateur</span>
+      <p>GMSK 4800 bps, BT=0.5. Amateur digital voice and data.</p>
+    </div>
+    <div class="protocol-card">
+      <h4>TETRA</h4>
+      <span class="proto-tag">European Public Safety</span>
+      <p>π/4-DQPSK TDMA, 36 kbps. European trunked radio standard.</p>
+    </div>
+    <div class="protocol-card">
+      <h4>AIS</h4>
+      <span class="proto-tag">Marine</span>
+      <p>GMSK 9600 bps, NRZI+HDLC. Vessel tracking on VHF 161.975 / 162.025 MHz.</p>
+    </div>
+    <div class="protocol-card">
+      <h4>POCSAG</h4>
+      <span class="proto-tag">Paging</span>
+      <p>2-FSK ±4500 Hz, 512/1200/2400 baud. Hospital paging, fire dispatch.</p>
+    </div>
+    <div class="protocol-card">
+      <h4>ACARS</h4>
+      <span class="proto-tag">Aviation</span>
+      <p>AM-FSK 2400 bps. Aircraft datalink on VHF 129-136 MHz.</p>
+    </div>
+    <div class="protocol-card">
+      <h4>FM Broadcast</h4>
+      <span class="proto-tag">Broadcast</span>
+      <p>WB/NB FM, 75 kHz deviation. Stereo pilot + RDS capable.</p>
+    </div>
+    <div class="protocol-card">
+      <h4>AIS / CW / AFSK</h4>
+      <span class="proto-tag">Amateur / Marine</span>
+      <p>Morse CW, Bell 202 AFSK (APRS 1200 bps), generic FSK.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── ML Section ─────────────────────────────────────────────────────────── -->
+<section id="ml">
+  <h2>Signal Classification (ML)</h2>
+  <p>AnalysisApp uses a <strong>36-class RadioResNet</strong> trained on 922k synthetic samples covering all supported modulation types and protocols.</p>
+
+  <div class="model-info">
+    <div class="model-stat"><span class="stat-num">36</span><span class="stat-label">Classes</span></div>
+    <div class="model-stat"><span class="stat-num">837k</span><span class="stat-label">Parameters</span></div>
+    <div class="model-stat"><span class="stat-num">922k</span><span class="stat-label">Training samples</span></div>
+    <div class="model-stat"><span class="stat-num">0.3%</span><span class="stat-label">SR freq offset (post-AFC)</span></div>
+  </div>
+
+  <h4>Training data</h4>
+  <ul>
+    <li><strong>synth_v3_protocols.npz</strong> — 810k samples, all 36 classes, ±0.3% SR freq offset + IQ impairments (replaces old ±2% which destroyed constellation structure)</li>
+    <li><strong>qam_heavy.npz</strong> — 112k samples, QAM classes only, post-AFC impairments + multipath (harder data)</li>
+  </ul>
+
+  <h4>Two-path architecture</h4>
+  <pre class="code-example"><code>RF_DETECTION → [IQ snapshot embedded]
+                    ↓
+              OnnxClassifier (fast, ~5ms)
+              confidence ≥ 0.75 → publish
+              confidence  &lt; 0.75 → slow path
+                    ↓
+              IqFetcher (65k samples)
+              FeatureExtractor → rule engine
+              + ONNX inference → publish</code></pre>
+</section>
+
+<section id="speech">
+  <h2>Speech Detection &amp; Transcription</h2>
+  <p>SpeechApp uses a two-stage pipeline that detects speech in demodulated audio then transcribes it:</p>
+
+  <table class="flow-table">
+    <thead><tr><th>Stage</th><th>Technology</th><th>Speed</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>VAD</td><td>EnergyVad (RMS gate)</td><td>&lt;1 ms</td><td>Skip Whisper for silence / noise</td></tr>
+      <tr><td>STT</td><td>whisper.cpp (GGML)</td><td>Model-dependent</td><td>Speech → text, language detection</td></tr>
+      <tr><td>Storage</td><td>SQLite + daily .txt</td><td>—</td><td>Queryable transcript history</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Model selection</h4>
+  <table class="flow-table">
+    <thead><tr><th>Model</th><th>Size</th><th>CPU speed</th><th>Use case</th></tr></thead>
+    <tbody>
+      <tr><td>base.en</td><td>145 MB</td><td>7× real-time</td><td>English-only, fast deployment</td></tr>
+      <tr><td>small</td><td>488 MB</td><td>4× real-time</td><td>Multilingual</td></tr>
+      <tr><td>medium</td><td>1.5 GB</td><td>2× real-time</td><td>Best accuracy</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</main>
+
+<footer>
+  <p>SDR Signal Intelligence Pipeline — <a href="https://github.com/BMichaud7">github.com/BMichaud7</a></p>
+  <p>All CI passing · APCO-25 · P25 · DMR · NXDN · AIS · POCSAG · ACARS</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
