@@ -208,11 +208,17 @@ cd SdrScripts</code></pre>
 </div>
 <p>Key improvement: original training data used ±2% SR frequency offset = 10+ full carrier rotations over 512 samples, destroying all constellation structure. Fixed to ±0.3% SR (realistic post-AFC residual) — significantly improved all classes.</p>
 
-<h4>36-class model — training in progress</h4>
+<h4>36-class model — training complete</h4>
+<div class="acc-grid" style="margin-bottom:1rem">
+  <div class="acc good"><div class="an">0.780</div><div class="al">Final val_acc — 36 classes (was 0.743 at 28 classes)</div></div>
+  <div class="acc ok"><div class="an">0.087</div><div class="al">Min class accuracy (was 0.065)</div></div>
+  <div class="acc ok"><div class="an">30</div><div class="al">Epochs · 922k samples · RTX 2060 Super</div></div>
+  <div class="acc good"><div class="an">8</div><div class="al">New protocol classes added</div></div>
+</div>
 <div class="rrow"><span class="rl">New classes</span><span class="rv">P25_C4FM · DMR · NXDN · D-STAR · TETRA · AIS · POCSAG · ACARS</span></div>
-<div class="rrow"><span class="rl">Training samples</span><span class="rv">922,000 (synth_v3_protocols.npz + qam_heavy.npz with multipath)</span></div>
-<div class="rrow"><span class="rl">Epoch 2 val_acc</span><span class="rv">0.713 — tracking upward</span></div>
+<div class="rrow"><span class="rl">Training data</span><span class="rv">922,000 samples — synth_v3_protocols.npz + qam_heavy.npz (multipath augmentation)</span></div>
 <div class="rrow"><span class="rl">Model</span><span class="rv">837k-parameter RadioResNet · focal loss γ=2 · QAM oversampling ×2</span></div>
+<div class="rrow"><span class="rl">Key improvement</span><span class="rv">±2% SR → ±0.3% SR freq offset fixed: preserves constellation structure for all classes</span></div>
 </div>
 </section>
 

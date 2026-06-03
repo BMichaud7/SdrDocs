@@ -1,17 +1,23 @@
 'use strict';
 const links = document.querySelectorAll('#nav a');
-const obs = new IntersectionObserver(e => {
-  e.forEach(entry => {
+
+// Observe both sections AND named result divs
+const targets = document.querySelectorAll('section[id], div[id]');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
     if (entry.isIntersecting) {
+      const id = entry.target.id;
       links.forEach(l => l.classList.remove('active'));
-      const a = document.querySelector(`#nav a[href="#${entry.target.id}"]`);
-      if (a) a.classList.add('active');
+      const match = document.querySelector(`#nav a[href="#${id}"]`);
+      if (match) match.classList.add('active');
     }
   });
-}, { rootMargin: '-20% 0px -70% 0px' });
-document.querySelectorAll('section[id]').forEach(s => obs.observe(s));
+}, { rootMargin: '-15% 0px -65% 0px' });
+
+targets.forEach(t => obs.observe(t));
+
 links.forEach(l => l.addEventListener('click', e => {
   e.preventDefault();
-  document.querySelector(l.getAttribute('href'))
-    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const target = document.querySelector(l.getAttribute('href'));
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }));
