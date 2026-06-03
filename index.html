@@ -31,6 +31,8 @@
   <a href="#speech"><span class="nav-ic">♪</span> Speech</a>
   <a href="#gui"><span class="nav-ic">▣</span> Desktop GUI</a>
   <a href="#scripts"><span class="nav-ic">⚡</span> Scripts / Ops</a>
+  <a href="#threat"><span class="nav-ic">⚠</span> Threat Detection</a>
+  <a href="#config"><span class="nav-ic">⚙</span> Config Reference</a>
 
   <div class="nav-sep">Results</div>
   <a href="#ml-acc"><span class="nav-ic">✦</span> ML Accuracy</a>
@@ -68,8 +70,9 @@
       <span class="tag">Au units</span>
     </div>
     <div class="stat-row">
-      <div class="stat"><div class="stat-n">12</div><div class="stat-l">Repositories</div></div>
+      <div class="stat"><div class="stat-n">13</div><div class="stat-l">Repositories</div></div>
       <div class="stat"><div class="stat-n">25+</div><div class="stat-l">Protocols decoded</div></div>
+      <div class="stat"><div class="stat-n">6</div><div class="stat-l">Threat detectors</div></div>
       <div class="stat"><div class="stat-n">36</div><div class="stat-l">Signal classes (ML)</div></div>
       <div class="stat"><div class="stat-n">78%</div><div class="stat-l">Overall ML val_acc</div></div>
       <div class="stat"><div class="stat-n">&lt;2°</div><div class="stat-l">DF bearing accuracy</div></div>
@@ -727,6 +730,130 @@ kubectl apply -f deploy/k8s/demod-deployment.yaml
 # Secrets (AMQP credentials, PostgreSQL password) via k8s Secret
 kubectl apply -f deploy/k8s/secrets.yaml</code></pre>
 <p>All component manifests reference the same Secret for AMQP and database credentials. Component images are published to <code>ghcr.io/bmichaud7/</code> and tagged by git SHA for reproducible deployments.</p>
+</section>
+
+<!-- ══════════════════════════════════════ THREAT DETECTION -->
+<section id="threat">
+<h2>Threat Detection</h2>
+<p>The stack includes passive RF threat detection across two layers. All alerts are stored in the <code>rf_alerts</code> PostgreSQL table and queryable via <code>SELECT * FROM recent_alerts;</code>. Every feature is disabled by default and individually controlled in config files.</p>
+
+<h4>GPS jamming and spoofing (AcquisitionApp)</h4>
+<p><code>GpsMonitor</code> periodically captures 100 ms of IQ at L1 (1575.42 MHz), L2 (1227.60 MHz), and L5 (1176.45 MHz). It maintains an exponential moving-average noise baseline per band and classifies any anomaly:</p>
+<div class="feat-grid">
+  <div class="feat"><strong>Jamming — GPS_JAMMING</strong><p>Power exceeds the EMA baseline by ≥ 20 dB (configurable). Catches broadband noise jammers, CW tone jammers, and sweep jammers. Severity: HIGH (&lt;40 dB delta) or CRITICAL (≥40 dB).</p></div>
+  <div class="feat"><strong>Spoofing — GPS_SPOOFING</strong><p>A BPSK-shaped signal (~0.5–5 MHz BW) at a GPS carrier at detectable power (&gt; −110 dBm). Real GPS signals are always ~20 dB below the noise floor — any detectable signal at L1/L2/L5 is suspicious. Severity: CRITICAL.</p></div>
+</div>
+
+<h4>Content-layer validators (DemodApp)</h4>
+<p>Each demodulator runs an in-process validator after decoding. Anomalies set <code>DemodResult::alert_json</code>; DemodRouter forwards them to <code>rf.alerts</code> AMQP, which AcquisitionApp persists to the database.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Signal</th><th>Alert type</th><th>Detection logic</th><th>Severity</th></tr></thead>
+<tbody>
+<tr><td>ADS-B 1090 MHz</td><td><code>ADSB_SPOOFING</code></td><td>DF17/18 groundspeed &gt; 700 kt or altitude &gt; 60 000 ft</td><td>HIGH</td></tr>
+<tr><td>ADS-B 1090 MHz</td><td><code>ADSB_JAMMING</code></td><td>CRC-24 failure rate &gt; 80% of Mode S candidates</td><td>HIGH</td></tr>
+<tr><td>AIS VHF</td><td><code>AIS_SPOOFING</code></td><td>Speed over ground &gt; 50 kt (surface vessel limit) or invalid 9-digit MMSI</td><td>HIGH / MEDIUM</td></tr>
+<tr><td>EAS/SAME</td><td><code>EAS_SPOOFING</code></td><td>Invalid FCC originator (not PEP/EAS/CIV/WXR/NWS/EAN) or rare national event code</td><td>HIGH / MEDIUM</td></tr>
+<tr><td>DSC Marine</td><td><code>DSC_SPOOFING</code></td><td>Distress call (cat 112) with invalid MMSI structure (MID not 200–799 or starts with 0)</td><td>CRITICAL</td></tr>
+<tr><td>P25 Control</td><td><code>P25_ROGUE_SITE</code></td><td>RFSS_STATUS_BCAST WACN changes mid-session on the same control channel frequency</td><td>HIGH</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>Querying alerts</h4>
+<pre><code class="language-sql">-- All alerts in the last hour
+SELECT * FROM recent_alerts;
+
+-- GPS threats only
+SELECT time, alert_type, severity, freq_mhz, delta_db, details
+FROM recent_alerts WHERE alert_type LIKE 'GPS_%';
+
+-- Critical threats in the last 24 hours
+SELECT detected_at, alert_type, details
+FROM rf_alerts
+WHERE severity = 'CRITICAL'
+  AND detected_at > now() - INTERVAL '24 hours'
+ORDER BY detected_at DESC;</code></pre>
+
+<h4>Enabling threat detection</h4>
+<p>Set <code>&lt;enabled&gt;true&lt;/enabled&gt;</code> in both config files. GPS monitor also needs <code>&lt;gps_enabled&gt;true&lt;/gps_enabled&gt;</code> and hardware capable of reaching 1575 MHz (HackRF, USRP — RTL-SDR is marginal).</p>
+<pre><code class="language-xml">&lt;!-- scanner.xml --&gt;
+&lt;threat&gt;
+  &lt;enabled&gt;true&lt;/enabled&gt;
+  &lt;gps_enabled&gt;true&lt;/gps_enabled&gt;        &lt;!-- requires HackRF/USRP for L1 --&gt;
+  &lt;gps_jammer_threshold_db&gt;20.0&lt;/gps_jammer_threshold_db&gt;
+  &lt;adsb_enabled&gt;true&lt;/adsb_enabled&gt;      &lt;!-- always recommended --&gt;
+  &lt;ais_enabled&gt;true&lt;/ais_enabled&gt;
+  &lt;dsc_enabled&gt;true&lt;/dsc_enabled&gt;
+  &lt;p25_rogue_enabled&gt;true&lt;/p25_rogue_enabled&gt;
+&lt;/threat&gt;
+
+&lt;!-- demod.xml --&gt;
+&lt;threat&gt;
+  &lt;enabled&gt;true&lt;/enabled&gt;
+  &lt;adsb_enabled&gt;true&lt;/adsb_enabled&gt;
+  &lt;ais_enabled&gt;true&lt;/ais_enabled&gt;
+  &lt;p25_rogue_enabled&gt;true&lt;/p25_rogue_enabled&gt;
+&lt;/threat&gt;</code></pre>
+</section>
+
+<!-- ══════════════════════════════════════ CONFIG REFERENCE -->
+<section id="config">
+<h2>Configuration Reference</h2>
+<p>All configuration is XML. Both <code>scanner.xml</code> (AcquisitionApp) and <code>demod.xml</code> (DemodApp) are fully documented inline. Key options below.</p>
+
+<h4>scanner.xml — AcquisitionApp</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Element</th><th>Default</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>&lt;scanner_id&gt;</code></td><td>scanner-0</td><td>Unique name embedded in every RF_DETECTION message and database row.</td></tr>
+<tr><td><code>&lt;sweep&gt;&lt;start_hz&gt;</code></td><td>70 MHz</td><td>Sweep start frequency. RTL-SDR minimum ~500 kHz; HackRF 1 MHz.</td></tr>
+<tr><td><code>&lt;sweep&gt;&lt;stop_hz&gt;</code></td><td>1 GHz</td><td>Sweep stop frequency. Hardware-limited; set to device max.</td></tr>
+<tr><td><code>&lt;sweep&gt;&lt;threshold_db&gt;</code></td><td>10.0</td><td>CA-CFAR detection threshold above local noise floor (dB). Lower = more sensitive but higher false alarm rate.</td></tr>
+<tr><td><code>&lt;sweep&gt;&lt;cfar_guard_bins&gt;</code></td><td>8</td><td>CFAR guard cells each side of test bin. Increase for wide signals (e.g. FM broadcast).</td></tr>
+<tr><td><code>&lt;sweep&gt;&lt;cfar_ref_bins&gt;</code></td><td>32</td><td>CFAR reference window size. More bins = better noise estimate.</td></tr>
+<tr><td><code>&lt;p25&gt;&lt;enabled&gt;</code></td><td>false</td><td>Enable P25 voice channel following. Requires DemodApp P25Monitor.</td></tr>
+<tr><td><code>&lt;p25&gt;&lt;capture_s&gt;</code></td><td>3.0</td><td>IQ capture duration (seconds) per voice channel grant.</td></tr>
+<tr><td><code>&lt;p25&gt;&lt;rank&gt;</code></td><td>3</td><td>Priority rank for P25 voice captures (3 = highest, preempts sweep).</td></tr>
+<tr><td><code>&lt;p25&gt;&lt;tg_whitelist&gt;</code></td><td>(empty)</td><td>Space-separated talk group IDs to follow. Empty = follow all.</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;enabled&gt;</code></td><td>false</td><td>Master threat detection switch. Must be true for any sub-feature.</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;gps_enabled&gt;</code></td><td>false</td><td>Enable L1/L2/L5 GPS monitor. Requires hardware reaching 1575 MHz.</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;gps_jammer_threshold_db&gt;</code></td><td>20.0</td><td>dB above EMA baseline to declare a GPS jammer.</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;gps_spoof_detectable_dbm&gt;</code></td><td>−110.0</td><td>Any GPS-band signal above this power (dBm) is a spoofing suspect.</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;gps_check_interval_s&gt;</code></td><td>30.0</td><td>Seconds between L1/L2/L5 checks to reduce sweep interruption.</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;adsb_enabled&gt;</code></td><td>true</td><td>ADS-B physics + CRC rate validator (when threat enabled).</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;ais_enabled&gt;</code></td><td>true</td><td>AIS vessel physics + MMSI validator.</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;eas_enabled&gt;</code></td><td>true</td><td>EAS/SAME originator and event code validator.</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;dsc_enabled&gt;</code></td><td>true</td><td>DSC distress MMSI anomaly validator.</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;p25_rogue_enabled&gt;</code></td><td>true</td><td>P25 rogue site (unexpected WACN change) detector.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>demod.xml — DemodApp</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Element</th><th>Default</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>&lt;engine&gt;&lt;rank&gt;</code></td><td>4</td><td>IQ fetch priority rank (higher = higher priority than sweep).</td></tr>
+<tr><td><code>&lt;engine&gt;&lt;audio_duration_ms&gt;</code></td><td>5000</td><td>IQ capture window for analog audio modes (FM, AM, SSB).</td></tr>
+<tr><td><code>&lt;engine&gt;&lt;digital_duration_ms&gt;</code></td><td>2000</td><td>IQ capture window for digital protocol modes.</td></tr>
+<tr><td><code>&lt;engine&gt;&lt;min_confidence&gt;</code></td><td>0.70</td><td>Minimum AnalysisApp classifier confidence to trigger demodulation.</td></tr>
+<tr><td><code>&lt;p25&gt;&lt;enabled&gt;</code></td><td>false</td><td>Enable P25 control channel decoder and voice encryption detection.</td></tr>
+<tr><td><code>&lt;p25&gt;&lt;control_freq_hz&gt;</code></td><td>0</td><td>Control channel frequency (Hz). 0 = auto-detect from rf.detections.</td></tr>
+<tr><td><code>&lt;p25&gt;&lt;tg_whitelist&gt;</code></td><td>(empty)</td><td>Space-separated talk group IDs to publish grants for. Empty = all.</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;enabled&gt;</code></td><td>false</td><td>Master switch for DemodApp content-layer validators.</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;adsb_enabled&gt;</code></td><td>true</td><td>ADS-B: impossible altitude (&gt;60 000 ft), groundspeed (&gt;700 kt), CRC rate (&gt;80%).</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;ais_enabled&gt;</code></td><td>true</td><td>AIS: SOG &gt; 50 kt or invalid MMSI structure.</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;eas_enabled&gt;</code></td><td>true</td><td>EAS: invalid FCC originator code or rare national event (EAN, NPT, EVI…).</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;dsc_enabled&gt;</code></td><td>true</td><td>DSC: distress call with invalid/suspicious MMSI. All distress calls logged.</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;p25_rogue_enabled&gt;</code></td><td>true</td><td>P25: WACN or SYS_ID changes mid-session on the same control channel.</td></tr>
+<tr><td><code>&lt;threat&gt;&lt;alert_topic&gt;</code></td><td>rf.alerts</td><td>AMQP topic alerts are published to. Must match scanner.xml alert_topic.</td></tr>
+</tbody>
+</table>
+</div>
 </section>
 
 <!-- ══════════════════════════════════════ ML ACCURACY (standalone — nav order matches document order) -->
