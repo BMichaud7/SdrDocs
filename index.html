@@ -37,10 +37,13 @@
   <div class="nav-sep">Results</div>
   <a href="accuracy.html"><span class="nav-ic">📊</span> Accuracy Charts ↗</a>
   <a href="spectrograms.html"><span class="nav-ic">🌊</span> Spectrograms ↗</a>
+  <a href="tools.html"><span class="nav-ic">🔧</span> Calculators ↗</a>
   <a href="#ml-acc"><span class="nav-ic">✦</span> ML Accuracy</a>
   <a href="#df-acc"><span class="nav-ic">◎</span> DF Accuracy</a>
   <a href="#stt-acc"><span class="nav-ic">◌</span> STT Performance</a>
   <a href="#latency"><span class="nav-ic">⏱</span> Latency</a>
+  <a href="#freq-chart"><span class="nav-ic">~</span> Frequency Map</a>
+  <a href="#snr-table"><span class="nav-ic">▲</span> SNR Thresholds</a>
 
   <div class="nav-sep">Protocols</div>
   <a href="#p25"><span class="nav-ic">⊛</span> P25 Trunking</a>
@@ -52,11 +55,14 @@
   <a href="#multisite"><span class="nav-ic">⊕</span> Multi-site DF</a>
   <a href="#comparison"><span class="nav-ic">⇌</span> Comparison</a>
   <a href="#roadmap"><span class="nav-ic">→</span> Roadmap</a>
+  <a href="#faq"><span class="nav-ic">?</span> FAQ</a>
+  <a href="#contributing"><span class="nav-ic">+</span> Contributing</a>
   <a href="#live"><span class="nav-ic">●</span> Live Feed</a>
 
   <div class="nav-sep">Library</div>
   <a href="#sdk"><span class="nav-ic">{ }</span> SdrSdk</a>
   <a href="#taskapi"><span class="nav-ic">⌗</span> SdrTaskApi</a>
+  <a href="#glossary-btn" id="glossaryOpen" onclick="openGlossary();return false"><span class="nav-ic">α</span> Glossary</a>
 
   <div class="nav-search">
     <input type="text" id="navSearch" placeholder="Search…" autocomplete="off">
@@ -1298,6 +1304,42 @@ double mhz = rf.center_freq_hz.in(au::mega(au::hertz));</code></pre>
 </div>
 </section>
 
+<!-- ══════════════════════════════════════ FREQUENCY MAP -->
+<section id="freq-chart">
+<h2>Protocol Frequency Map</h2>
+<p>Where each supported protocol operates in the RF spectrum. Hover a bar to see details. Logarithmic frequency axis — 100 kHz to 2 GHz.</p>
+<canvas id="freqCanvas" style="width:100%;height:320px;border-radius:var(--r);border:1px solid var(--bd);background:var(--bg2);display:block;cursor:crosshair"></canvas>
+<div id="freqTip" style="font-size:.78rem;color:var(--muted);margin-top:.4rem;min-height:1.2em;font-family:'JetBrains Mono',monospace"></div>
+</section>
+
+<!-- ══════════════════════════════════════ SNR THRESHOLDS -->
+<section id="snr-table">
+<h2>SNR Thresholds by Protocol</h2>
+<p>Minimum SNR at which the ML classifier reaches ≥ 75% confidence — the threshold for triggering demodulation on the fast path. Data from 158k-sample evaluation of the 47-class model.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Protocol / Modulation</th><th>Min SNR for ≥75% accuracy</th><th>Accuracy at 30 dB SNR</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>ADS-B</td><td class="rv g">−5 dB</td><td class="rv g">100%</td><td>PPM preamble very distinctive even in noise</td></tr>
+<tr><td>FM Wideband</td><td class="rv g">+5 dB</td><td class="rv g">100%</td><td>Wide deviation immediately recognisable</td></tr>
+<tr><td>FM Narrowband</td><td class="rv g">+5 dB</td><td class="rv g">100%</td><td>Clear once SNR allows FM demodulation</td></tr>
+<tr><td>GMSK / 4-FSK</td><td class="rv g">+5 dB</td><td class="rv g">99–100%</td><td>Discrete spectral structure resolves quickly</td></tr>
+<tr><td>AIS (GMSK)</td><td class="rv g">+5 dB</td><td class="rv g">99%</td><td>Strong GMSK signature</td></tr>
+<tr><td>POCSAG</td><td class="rv g">+5 dB</td><td class="rv g">98%</td><td>2-FSK burst pattern distinctive</td></tr>
+<tr><td>BPSK / QPSK</td><td class="rv o">+10 dB</td><td class="rv g">100%</td><td>Constellation clear above 10 dB; below = noise</td></tr>
+<tr><td>OFDM</td><td class="rv o">+10 dB</td><td class="rv g">98%</td><td>Flat-top spectral shape resolves at ~10 dB</td></tr>
+<tr><td>8PSK</td><td class="rv o">+10–15 dB</td><td class="rv g">99%</td><td>8-point constellation close to QPSK at low SNR</td></tr>
+<tr><td>DMR (4FSK TDMA)</td><td class="rv o">+5 dB</td><td class="rv o">77%</td><td>TDMA gap pattern confuses classifier</td></tr>
+<tr><td>P25 C4FM</td><td class="rv o">0 dB</td><td class="rv o">61%</td><td>Never reaches 75% — confused with DMR/NXDN</td></tr>
+<tr><td>QAM16</td><td class="rv o">+15 dB</td><td class="rv o">86%</td><td>Needs high SNR for constellation separation</td></tr>
+<tr><td>QAM256</td><td class="rv o">0 dB</td><td class="rv o">89%</td><td>Unusual: confused with QAM64/OFDM at moderate SNR</td></tr>
+<tr><td>QAM64</td><td class="rv r">Never</td><td class="rv r">9%</td><td>Worst class — always confused with QAM32/256. V2 model targets this.</td></tr>
+<tr><td>PSK31 / P25 Phase 2</td><td class="rv r">Never</td><td class="rv r">0%</td><td>512-sample window too short for slow baud rates. 1024-sample V2 model will improve.</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
 <!-- ══════════════════════════════════════ LATENCY -->
 <section id="latency">
 <h2>End-to-End Latency</h2>
@@ -1533,9 +1575,163 @@ FROM p25_channels GROUP BY encrypted, alg_name;</code></pre>
 # GET http://host:8080/api/status    — uptime, detection counts</code></pre>
 </section>
 
+<!-- ══════════════════════════════════════ FAQ -->
+<section id="faq">
+<h2>Frequently Asked Questions</h2>
+<div class="faq-list" id="faqList">
+
+<details class="faq-item"><summary>Why is classification slow on the first signal?</summary>
+<p>ONNX Runtime loads and JIT-compiles the model on first inference. With CUDA, this takes 2–5 seconds. Subsequent inferences are ~5 ms. The warm-up cost is a one-time startup penalty — it goes away after the first signal is classified. With TensorRT enabled (<code>&lt;use_tensorrt&gt;true&lt;/use_tensorrt&gt;</code>), a compiled engine is cached to disk so even cold starts are fast after the first ever run.</p>
+</details>
+
+<details class="faq-item"><summary>RTL-SDR tops out at ~1.7 GHz — can it receive GPS (1575 MHz)?</summary>
+<p>Marginally. The RTL-SDR Blog v3/v4 has a nominal max of 1.7 GHz but reception quality degrades above ~1.5 GHz. GPS L1 at 1575.42 MHz is theoretically reachable but sensitivity is very poor — you'd need a GPS patch antenna with LNA and a clear sky view. For reliable GPS monitoring use a HackRF One (up to 6 GHz) or USRP B210. For ADS-B at 1090 MHz, the RTL-SDR works excellently.</p>
+</details>
+
+<details class="faq-item"><summary>Why is QAM64 accuracy only ~7%?</summary>
+<p>QAM64 sits between QAM32 (32 points) and QAM256 (256 points) in constellation density. At the SNR levels in the training data, all three look nearly identical — the model can't reliably distinguish them. The 512-sample input window captures only a few symbol periods, and at low SNR the constellation becomes noise. The v2 model addresses this with 4× QAM oversampling, 1024-sample windows (more symbol statistics), and a wider network (256 channels vs 128). Expected improvement: 7% → ~40%.</p>
+</details>
+
+<details class="faq-item"><summary>How many simultaneous SDRs can I use?</summary>
+<p>Unlimited — the Resource Manager supports any number of SoapySDR devices configured in <code>devices-direct.xml</code>. Each device runs a dedicated IQ streaming thread. The scheduler automatically distributes tasks across devices based on frequency range, bandwidth, and current load. In practice, system USB bandwidth limits RTL-SDR to 3–4 per USB controller; USRP/HackRF/LimeSDR over gigabit ethernet scale better.</p>
+</details>
+
+<details class="faq-item"><summary>What's the difference between the fast path and slow path?</summary>
+<p>The <strong>fast path</strong> (~5 ms) runs ONNX inference on the 1024-sample IQ snapshot embedded in every <code>RF_DETECTION</code> message — no additional SDR acquisition needed. The <strong>slow path</strong> (~80 ms) is triggered when fast-path confidence is below the threshold (default 0.75). It requests a fresh 65k-sample NARROWBAND capture, extracts features (cumulants, FM deviation, OFDM CP ratio, PAPR), and runs both a rule engine and ONNX in parallel. The higher-confidence result is published.</p>
+</details>
+
+<details class="faq-item"><summary>Do I need a GPU to run the stack?</summary>
+<p>No — everything runs on CPU. GPU accelerates three things: ONNX inference in AnalysisApp (~5 ms GPU vs ~30–100 ms CPU), Whisper transcription in SpeechApp (~40 ms GPU vs ~400 ms CPU), and ML training. For a deployment that just detects and classifies signals (no transcription), a modern 4-core CPU handles the load comfortably. If you use <code>--demod</code> with SpeechApp, GPU is strongly recommended for real-time transcription.</p>
+</details>
+
+<details class="faq-item"><summary>Which Whisper model should I use for live voice monitoring?</summary>
+<p>For English-only real-time use: <strong>base.en</strong> (145 MB) is the tested baseline and runs at ~7× real-time on CPU / ~25× on GPU. For maximum accuracy: <strong>medium</strong> (1.5 GB) on a GPU. For an embedded/Pi deployment: <strong>tiny.en</strong> (75 MB) at ~15× real-time on CPU. The accuracy difference between base and medium is most visible at SNR 5–10 dB where base.en starts making errors.</p>
+</details>
+
+<details class="faq-item"><summary>Why does the full sweep take 7+ seconds?</summary>
+<p>At 20 MSPS with 0.8 usable bandwidth fraction, each sweep step covers 16 MHz. To sweep 70 MHz → 1 GHz (930 MHz span) requires ≈58 steps. Each step dwells for 4096/20MHz = 0.2 ms of IQ, but the SDR retune + settle time adds ~100 ms per step. Result: 58 × ~130 ms ≈ 7.5 seconds. Reduce the span or increase sample rate to speed up. For fast detection of known frequencies, use targeted NARROWBAND tasks instead of a sweep.</p>
+</details>
+
+<details class="faq-item"><summary>How do I find my local P25 control channel?</summary>
+<p>The <a href="https://www.radioreference.com">RadioReference database</a> lists all licensed P25 systems with control channel frequencies. Look up your county or city. Alternatively, run a spectrum scan and look for a 12.5 kHz flat-top signal near 851–869 MHz (800 MHz P25) or 769–806 MHz (700 MHz) that is always on — P25 control channels are continuous, unlike voice channels which are intermittent. Query <code>SELECT freq_mhz, hits FROM recent_signals WHERE bw_khz BETWEEN 10 AND 15 ORDER BY hits DESC</code> to find candidates.</p>
+</details>
+
+<details class="faq-item"><summary>Can I run multiple AcquisitionApp instances against the same stack?</summary>
+<p>Yes — each instance gets its own <code>scanner_id</code> and submits independent task requests to the Resource Manager. The Resource Manager schedules them across available hardware. Detection messages from each instance are published to <code>rf.detections</code> with the originating <code>scanner_id</code> field set. All instances share the same AMQP broker, AnalysisApp, and database.</p>
+</details>
+
+</div>
+</section>
+
+<!-- ══════════════════════════════════════ CONTRIBUTING -->
+<section id="contributing">
+<h2>Contributing — Adding a Demodulator</h2>
+<p>Adding a new protocol to DemodApp requires three files and one routing entry. The <code>IDemod</code> interface is minimal — one method, one return type.</p>
+
+<div class="steps">
+  <div class="step"><div class="sn">1</div><div class="sb">
+    <h3>Create the header</h3>
+    <pre><code class="language-cpp">// include/demod/MyProtoDemod.hpp
+#pragma once
+#include "demod/IDemod.hpp"
+namespace demod {
+class MyProtoDemod : public IDemod {
+public:
+    DemodResult process(const std::vector&lt;std::complex&lt;float&gt;&gt;&amp; iq,
+                        au::QuantityD&lt;au::Hertz&gt;   sr,
+                        au::QuantityD&lt;au::Hertz&gt;   center_freq,
+                        au::QuantityD&lt;au::Seconds&gt; timestamp) override;
+};
+} // namespace demod</code></pre>
+  </div></div>
+  <div class="step"><div class="sn">2</div><div class="sb">
+    <h3>Implement in the .cpp</h3>
+    <pre><code class="language-cpp">// src/demod/MyProtoDemod.cpp
+#include "demod/MyProtoDemod.hpp"
+#include &lt;liquid/liquid.h&gt;  // use freqdem, symsync_rrrf, modemcf, etc.
+#include &lt;spdlog/spdlog.h&gt;
+
+namespace demod {
+DemodResult MyProtoDemod::process(const std::vector&lt;std::complex&lt;float&gt;&gt;&amp; iq,
+                                   au::QuantityD&lt;au::Hertz&gt; sr, ...) {
+    DemodResult r;
+    r.type       = DemodClass::Bits;   // or Audio / RawIq
+    r.modulation = "MY_PROTO";
+    // ... demodulate using liquid-dsp primitives ...
+    // Optionally set r.alert_json for threat detection
+    return r;
+}
+} // namespace demod</code></pre>
+  </div></div>
+  <div class="step"><div class="sn">3</div><div class="sb">
+    <h3>Add to DemodRouter</h3>
+    <pre><code class="language-cpp">// src/DemodRouter.cpp — add two things:
+
+// 1. Include at top
+#include "demod/MyProtoDemod.hpp"
+
+// 2. Add to paramsFor() — return fetch parameters
+if (mod == "MY_PROTO") {
+    return {au::hertz(50'000.0), bw,
+            cfg_.engine.digital_duration,
+            DemodClass::Bits, 2, au::hertz(0.0)};
+}
+
+// 3. Add to route() dispatch switch
+case "MY_PROTO": result = MyProtoDemod{}.process(iq, actual_sr, center_freq, ts); break;</code></pre>
+  </div></div>
+  <div class="step"><div class="sn">4</div><div class="sb">
+    <h3>Add to CMakeLists.txt and write a test</h3>
+    <pre><code class="language-cmake"># CMakeLists.txt — add to demod_lib sources
+add_library(demod_lib STATIC
+    ...
+    src/demod/MyProtoDemod.cpp
+)</code></pre>
+    <p>Add a test in <code>tests/test_protocol_demods.cpp</code> using a spec-accurate synthetic waveform. Tests run in CI via <code>podman build --target test</code>.</p>
+  </div></div>
+</div>
+
+<h4>Adding an ML training class</h4>
+<p>To include the new protocol in the 47-class model, add a generator function in <code>tools/ml/generate_v3.py</code> and register it in the <code>_gen_one()</code> dispatch. The generator takes <code>(length, rng)</code> and returns a complex64 numpy array of IQ samples at the reference sample rate (200 kHz). Realistic impairments (IQ imbalance, AWGN, freq offset) are applied automatically by the training pipeline.</p>
+</section>
+
 </main>
 
+<!-- ══════════════════════════════════════ GLOSSARY DRAWER -->
+<div id="glossaryDrawer" style="position:fixed;top:0;right:-400px;width:380px;height:100vh;background:var(--bg2);border-left:1px solid var(--bd);z-index:500;overflow-y:auto;transition:right .25s;padding:1.5rem;box-sizing:border-box">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+    <h3 style="color:#fff;margin:0">Glossary</h3>
+    <button onclick="closeGlossary()" style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer">✕</button>
+  </div>
+  <input type="text" id="glossarySearch" placeholder="Filter terms…" style="width:100%;background:var(--bg3);border:1px solid var(--bd2);border-radius:6px;padding:.35rem .7rem;color:var(--tx);font-size:.83rem;margin-bottom:1rem;box-sizing:border-box">
+  <dl id="glossaryList" style="font-size:.83rem"></dl>
+</div>
+<div id="glossaryBackdrop" onclick="closeGlossary()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:499"></div>
+
+<!-- ══════════════════════════════════════ SEARCH OVERLAY -->
+<div id="searchOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:600;align-items:flex-start;justify-content:center;padding-top:10vh">
+  <div style="background:var(--bg2);border:1px solid var(--bd2);border-radius:var(--r);width:min(600px,90vw);overflow:hidden">
+    <div style="display:flex;align-items:center;gap:.5rem;padding:.75rem 1rem;border-bottom:1px solid var(--bd)">
+      <span style="color:var(--muted)">⌕</span>
+      <input id="searchInput" type="text" placeholder="Search documentation…" autocomplete="off"
+        style="flex:1;background:none;border:none;color:var(--tx);font-size:1rem;outline:none">
+      <kbd style="background:var(--bg3);border:1px solid var(--bd2);border-radius:4px;padding:.1rem .4rem;font-size:.72rem;color:var(--muted)">Esc</kbd>
+    </div>
+    <div id="searchResults" style="max-height:60vh;overflow-y:auto;padding:.5rem"></div>
+  </div>
+</div>
+
 <footer>
+  <span>Open RF Stack · <a href="https://github.com/OpenRFStack">github.com/OpenRFStack</a> · 11 repositories · C++20 · AMQP 1.0 · SoapySDR-compatible · All CI passing</span>
+  <div class="footer-links">
+    <a href="https://github.com/OpenRFStack/SdrResourceManager">Resource Manager</a>
+    <a href="https://github.com/OpenRFStack/AcquisitionApp">Acquisition</a>
+    <a href="https://github.com/OpenRFStack/AnalysisApp">Analysis</a>
+    <a href="https://github.com/OpenRFStack/DemodApp">Demod</a>
+    <a href="https://github.com/OpenRFStack/DfApp">DF</a>
+    <a href="https://github.com/OpenRFStack/SpeechApp">Speech</a>
+  </div>
+</footer>
   <span>Open RF Stack · <a href="https://github.com/OpenRFStack">github.com/OpenRFStack</a> · 12 repositories · C++20 · AMQP 1.0 · SoapySDR-compatible · All CI passing</span>
   <div class="footer-links">
     <a href="https://github.com/OpenRFStack/SdrResourceManager">Resource Manager</a>

@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Calculators — Open RF Stack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+.tool-card { background:var(--bg2); border:1px solid var(--bd); border-radius:var(--r); padding:1.4rem; margin:1.2rem 0 }
+.tool-card h3 { color:#fff; font-size:1rem; margin:0 0 .75rem }
+.field-row { display:flex; gap:.75rem; align-items:flex-end; flex-wrap:wrap; margin-bottom:.75rem }
+.field { display:flex; flex-direction:column; gap:.3rem; flex:1; min-width:140px }
+.field label { font-size:.75rem; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.05em }
+.field input, .field select {
+  background:var(--bg3); border:1px solid var(--bd2); border-radius:6px;
+  padding:.4rem .7rem; color:var(--tx); font-family:'JetBrains Mono',monospace;
+  font-size:.88rem; width:100%;
+}
+.field input:focus, .field select:focus { outline:none; border-color:var(--blue) }
+.result-box {
+  background:var(--bg3); border:1px solid var(--bd2); border-radius:6px;
+  padding:.7rem 1rem; font-family:'JetBrains Mono',monospace;
+  font-size:.88rem; color:var(--green); margin-top:.5rem; min-height:2.5rem;
+}
+.result-box.warn { color:var(--orange) }
+.result-box.err  { color:var(--red) }
+.cfar-viz { width:100%; height:80px; border-radius:6px; background:var(--bg3); display:block; margin-top:.75rem }
+.snr-slider { width:100%; accent-color:var(--blue) }
+.conf-bar { height:12px; background:var(--bg3); border-radius:6px; overflow:hidden; margin-top:.5rem }
+.conf-fill { height:100%; border-radius:6px; transition:width .3s, background .3s }
+.tools-grid { display:grid; grid-template-columns:1fr 1fr; gap:1.2rem }
+@media(max-width:700px){ .tools-grid { grid-template-columns:1fr } }
+</style>
+</head>
+<body>
+
+<nav id="nav" style="padding-top:.75rem">
+  <a class="nav-logo" href="index.html"><span>📡</span> Open RF Stack</a>
+  <div class="nav-sep">Calculators</div>
+  <a href="#iq-buffer">IQ Buffer Size</a>
+  <a href="#df-spacing">DF Antenna Spacing</a>
+  <a href="#cfar">CFAR Threshold</a>
+  <a href="#snr-conf">SNR → Confidence</a>
+  <a href="#bw-calc">Bandwidth / Symbol Rate</a>
+  <a href="#sweep-time">Sweep Time</a>
+  <div class="nav-sep">Pages</div>
+  <a href="index.html">← Documentation</a>
+  <a href="spectrograms.html">Spectrograms</a>
+  <a href="accuracy.html">Accuracy Charts</a>
+</nav>
+
+<header>
+  <div class="hdr">
+    <div class="hdr-top">
+      <div class="logo-wrap">🔧</div>
+      <div>
+        <h1>Calculators</h1>
+        <p>Interactive tools for SDR system design — buffer sizing, antenna geometry, detection thresholds, and performance estimation. All calculations run locally in your browser.</p>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+<div class="tools-grid">
+
+<!-- ── IQ Buffer Size ── -->
+<section id="iq-buffer">
+<h2>IQ Buffer Size</h2>
+<p>How much RAM and disk is needed to store or stream IQ samples.</p>
+<div class="tool-card">
+  <h3>IQ memory calculator</h3>
+  <div class="field-row">
+    <div class="field"><label>Sample rate (MSPS)</label><input id="iq-sr" type="number" value="20" min="0.1" max="200" step="0.1"></div>
+    <div class="field"><label>Duration (seconds)</label><input id="iq-dur" type="number" value="1" min="0.001" max="3600" step="0.1"></div>
+    <div class="field"><label>Format</label>
+      <select id="iq-fmt">
+        <option value="8">CF32 (complex float32) — 8 bytes/sample</option>
+        <option value="4">CI16 (complex int16) — 4 bytes/sample</option>
+        <option value="2">CI8 (complex int8) — 2 bytes/sample</option>
+      </select>
+    </div>
+  </div>
+  <div class="result-box" id="iq-result">—</div>
+  <p style="margin-top:.6rem;font-size:.78rem;color:var(--muted)">
+    AcquisitionApp default: 1024-sample snapshot = <strong id="iq-snapshot-size">—</strong> per detection at 20 MSPS CF32.
+    Slow-path: 65536 samples = <strong id="iq-slowpath-size">—</strong>.
+  </p>
+</div>
+</section>
+
+<!-- ── DF Antenna Spacing ── -->
+<section id="df-spacing">
+<h2>DF Antenna Spacing</h2>
+<p>Optimal element spacing for direction finding arrays. λ/2 spacing maximises angular resolution while avoiding spatial aliasing.</p>
+<div class="tool-card">
+  <h3>UCA element spacing calculator</h3>
+  <div class="field-row">
+    <div class="field"><label>Centre frequency (MHz)</label><input id="df-freq" type="number" value="462.5" min="1" max="6000" step="0.1"></div>
+    <div class="field"><label>Number of elements</label><input id="df-n" type="number" value="5" min="2" max="16" step="1"></div>
+    <div class="field"><label>Spacing factor</label>
+      <select id="df-factor">
+        <option value="0.5">λ/2 (optimal — no aliasing)</option>
+        <option value="0.4">0.4λ (conservative)</option>
+        <option value="1.0">λ (wider array, aliasing)</option>
+      </select>
+    </div>
+  </div>
+  <div class="result-box" id="df-result">—</div>
+</div>
+</section>
+
+<!-- ── CFAR ── -->
+<section id="cfar">
+<h2>CFAR Threshold</h2>
+<p>Visualise how CA-CFAR sets a detection threshold relative to the local noise floor. Adjust guard and reference cell counts.</p>
+<div class="tool-card">
+  <h3>CA-CFAR window visualiser</h3>
+  <div class="field-row">
+    <div class="field"><label>Guard cells (each side)</label><input id="cfar-guard" type="number" value="8" min="1" max="32"></div>
+    <div class="field"><label>Reference cells (each side)</label><input id="cfar-ref" type="number" value="32" min="4" max="64"></div>
+    <div class="field"><label>Threshold offset (dB)</label><input id="cfar-thresh" type="number" value="6" min="0" max="20" step="0.5"></div>
+  </div>
+  <canvas id="cfar-canvas" class="cfar-viz"></canvas>
+  <div class="result-box" id="cfar-result">—</div>
+</div>
+</section>
+
+<!-- ── SNR → Confidence ── -->
+<section id="snr-conf">
+<h2>SNR → Classifier Confidence</h2>
+<p>Estimated classifier confidence for common modulations at a given SNR, based on measured per-class accuracy from the 47-class model.</p>
+<div class="tool-card">
+  <h3>Confidence estimator</h3>
+  <div class="field-row">
+    <div class="field"><label>Modulation</label>
+      <select id="snr-mod">
+        <option value="ADS_B">ADS-B</option>
+        <option value="FM_WB">FM Wideband</option>
+        <option value="FM_NB">FM Narrowband</option>
+        <option value="GMSK">GMSK</option>
+        <option value="4FSK">4-FSK</option>
+        <option value="AIS">AIS</option>
+        <option value="BPSK">BPSK</option>
+        <option value="QPSK">QPSK</option>
+        <option value="8PSK">8PSK</option>
+        <option value="OFDM">OFDM</option>
+        <option value="QAM16">QAM16</option>
+        <option value="DMR">DMR</option>
+        <option value="QAM256">QAM256</option>
+        <option value="QAM64">QAM64</option>
+        <option value="P25_C4FM">P25 C4FM</option>
+        <option value="POCSAG">POCSAG</option>
+      </select>
+    </div>
+    <div class="field"><label>SNR (dB): <span id="snr-val">10</span></label>
+      <input type="range" class="snr-slider" id="snr-slider" min="-10" max="30" step="5" value="10">
+    </div>
+  </div>
+  <div class="conf-bar"><div class="conf-fill" id="conf-fill" style="width:0%"></div></div>
+  <div class="result-box" id="snr-result">—</div>
+</div>
+</section>
+
+<!-- ── Bandwidth / Symbol Rate ── -->
+<section id="bw-calc">
+<h2>Bandwidth / Symbol Rate</h2>
+<p>Convert between symbol rate, bit rate, bandwidth, and samples per symbol.</p>
+<div class="tool-card">
+  <h3>Modulation bandwidth calculator</h3>
+  <div class="field-row">
+    <div class="field"><label>Modulation</label>
+      <select id="bw-mod" onchange="calcBw()">
+        <option value="2">BPSK (1 bit/sym)</option>
+        <option value="4">QPSK (2 bit/sym)</option>
+        <option value="8">8PSK (3 bit/sym)</option>
+        <option value="16">QAM16 (4 bit/sym)</option>
+        <option value="64">QAM64 (6 bit/sym)</option>
+        <option value="256">QAM256 (8 bit/sym)</option>
+        <option value="2fsk">2-FSK (1 bit/sym)</option>
+        <option value="4fsk">4-FSK (2 bit/sym)</option>
+      </select>
+    </div>
+    <div class="field"><label>Symbol rate (kbaud)</label><input id="bw-sym" type="number" value="4.8" min="0.1" max="100000" step="0.1" oninput="calcBw()"></div>
+    <div class="field"><label>FSK deviation (kHz)</label><input id="bw-dev" type="number" value="5" min="0.1" max="1000" step="0.1" oninput="calcBw()" id="bw-dev-wrap"></div>
+  </div>
+  <div class="result-box" id="bw-result">—</div>
+</div>
+</section>
+
+<!-- ── Sweep Time ── -->
+<section id="sweep-time">
+<h2>Sweep Time Estimator</h2>
+<p>How long a full spectrum sweep takes given your hardware and FFT settings.</p>
+<div class="tool-card">
+  <h3>AcquisitionApp sweep estimator</h3>
+  <div class="field-row">
+    <div class="field"><label>Start frequency (MHz)</label><input id="sw-start" type="number" value="70" min="0.1" max="6000"></div>
+    <div class="field"><label>Stop frequency (MHz)</label><input id="sw-stop" type="number" value="1000" min="1" max="6000"></div>
+    <div class="field"><label>Sample rate (MSPS)</label><input id="sw-sr" type="number" value="20" min="0.5" max="200" step="0.5"></div>
+    <div class="field"><label>Usable BW fraction</label><input id="sw-bw" type="number" value="0.80" min="0.5" max="1.0" step="0.01"></div>
+  </div>
+  <div class="result-box" id="sw-result">—</div>
+</div>
+</section>
+
+</div><!-- end tools-grid -->
+</main>
+
+<footer>
+  <span>Open RF Stack · All calculations run in your browser — no server required</span>
+  <div class="footer-links"><a href="index.html">Documentation</a><a href="accuracy.html">Accuracy Charts</a></div>
+</footer>
+
+<script>
+'use strict';
+
+// ── IQ buffer ─────────────────────────────────────────────────────────────────
+function calcIq() {
+  const sr = parseFloat(document.getElementById('iq-sr').value) * 1e6;
+  const dur = parseFloat(document.getElementById('iq-dur').value);
+  const bps = parseInt(document.getElementById('iq-fmt').value);
+  if (!sr || !dur) return;
+  const bytes = sr * dur * bps;
+  const fmt = b => b < 1024 ? b.toFixed(0)+' B' : b < 1048576 ? (b/1024).toFixed(1)+' KB' :
+    b < 1073741824 ? (b/1048576).toFixed(1)+' MB' : (b/1073741824).toFixed(2)+' GB';
+  const mbps = sr * bps * 8 / 1e6;
+  document.getElementById('iq-result').textContent =
+    `${fmt(bytes)} total  |  ${mbps.toFixed(1)} Mbps stream  |  ${(sr*dur/1e6).toFixed(2)} M samples`;
+  document.getElementById('iq-snapshot-size').textContent = fmt(1024 * bps);
+  document.getElementById('iq-slowpath-size').textContent = fmt(65536 * bps);
+}
+['iq-sr','iq-dur','iq-fmt'].forEach(id => document.getElementById(id).addEventListener('input', calcIq));
+calcIq();
+
+// ── DF spacing ────────────────────────────────────────────────────────────────
+function calcDf() {
+  const f = parseFloat(document.getElementById('df-freq').value) * 1e6;
+  const n = parseInt(document.getElementById('df-n').value);
+  const factor = parseFloat(document.getElementById('df-factor').value);
+  const lambda = 3e8 / f;
+  const spacing_m = lambda * factor;
+  const radius_m  = spacing_m / (2 * Math.sin(Math.PI / n));
+  const res = 0.5143 / (n * radius_m / lambda); // approximate MUSIC resolution (radians)
+  const res_deg = res * 180 / Math.PI;
+  const el = document.getElementById('df-result');
+  el.textContent = `λ = ${(lambda*100).toFixed(1)} cm  |  element spacing = ${(spacing_m*100).toFixed(1)} cm  |  array radius = ${radius_m.toFixed(2)} m  |  est. resolution ≈ ${res_deg.toFixed(1)}°`;
+  el.className = 'result-box' + (n < 3 ? ' warn' : '');
+  if (n === 2) el.textContent += '  ⚠ 180° left/right ambiguity with 2 elements';
+}
+['df-freq','df-n','df-factor'].forEach(id => document.getElementById(id).addEventListener('input', calcDf));
+calcDf();
+
+// ── CFAR canvas ───────────────────────────────────────────────────────────────
+function drawCfar() {
+  const guard = parseInt(document.getElementById('cfar-guard').value);
+  const ref   = parseInt(document.getElementById('cfar-ref').value);
+  const tdb   = parseFloat(document.getElementById('cfar-thresh').value);
+  const canvas = document.getElementById('cfar-canvas');
+  canvas.width  = canvas.offsetWidth || 600;
+  canvas.height = 80;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  const total = guard*2 + ref*2 + 1;
+  const cellW = Math.max(1, Math.floor(W / total));
+  const mid = Math.floor(total / 2);
+
+  for (let i = 0; i < total; i++) {
+    const x = i * cellW;
+    const isTest  = i === mid;
+    const isGuard = Math.abs(i - mid) <= guard && !isTest;
+    const isRef   = !isTest && !isGuard;
+    ctx.fillStyle = isTest ? '#4f9eff' : isGuard ? '#272d35' : '#1c3a1c';
+    ctx.fillRect(x, 20, cellW-1, H-30);
+    if (i === 0 || i === total-1 || i === mid) {
+      ctx.fillStyle = '#768390'; ctx.font = '10px Inter'; ctx.textAlign = 'center';
+      if (isTest) ctx.fillText('TEST', x+cellW/2, 15);
+    }
+  }
+  // Labels
+  ctx.fillStyle = '#768390'; ctx.font = '10px Inter'; ctx.textAlign = 'center';
+  ctx.fillText(`← ${ref} ref →`, (ref/2)*cellW, H-4);
+  ctx.fillText(`guard`, (mid-guard/2)*cellW, H-4);
+  ctx.fillText(`guard`, (mid+guard/2)*cellW, H-4);
+  ctx.fillText(`← ${ref} ref →`, (mid+guard+ref/2+1)*cellW, H-4);
+
+  const totalCells = guard*2 + ref*2 + 1;
+  document.getElementById('cfar-result').textContent =
+    `Window: ${totalCells} bins total  |  threshold = noise_floor + ${tdb} dB  |  noise estimated from ${ref*2} reference bins`;
+}
+['cfar-guard','cfar-ref','cfar-thresh'].forEach(id => document.getElementById(id).addEventListener('input', drawCfar));
+window.addEventListener('load', drawCfar);
+drawCfar();
+
+// ── SNR → confidence ──────────────────────────────────────────────────────────
+// Per-class per-SNR data from evaluate.py (47-class model, n=158k)
+const SNR_DATA = {
+  'ADS_B':   {'-10':38.8,'-5':100,'0':100,'5':100,'10':100,'15':100,'20':100,'25':100,'30':100},
+  'FM_WB':   {'-10':0,'-5':0,'0':54,'5':97,'10':100,'15':100,'20':100,'25':100,'30':100},
+  'FM_NB':   {'-10':0,'-5':0,'0':1,'5':82,'10':97,'15':98,'20':99,'25':100,'30':100},
+  'GMSK':    {'-10':0,'-5':0,'0':1,'5':90,'10':100,'15':100,'20':99,'25':100,'30':100},
+  '4FSK':    {'-10':0,'-5':0,'0':0,'5':79,'10':99,'15':100,'20':99,'25':100,'30':99},
+  'AIS':     {'-10':0,'-5':0,'0':3,'5':96,'10':100,'15':100,'20':100,'25':100,'30':98},
+  'BPSK':    {'-10':0,'-5':0,'0':0,'5':0,'10':99,'15':100,'20':100,'25':100,'30':100},
+  'QPSK':    {'-10':0,'-5':0,'0':0,'5':6,'10':99,'15':100,'20':100,'25':100,'30':100},
+  '8PSK':    {'-10':0,'-5':0,'0':0,'5':0,'10':71,'15':99,'20':100,'25':99,'30':99},
+  'OFDM':    {'-10':0,'-5':0,'0':0,'5':12,'10':91,'15':98,'20':98,'25':98,'30':97},
+  'QAM16':   {'-10':0,'-5':0,'0':0,'5':0,'10':17,'15':73,'20':81,'25':85,'30':86},
+  'DMR':     {'-10':0,'-5':0,'0':31,'5':67,'10':72,'15':70,'20':82,'25':75,'30':77},
+  'QAM256':  {'-10':0,'-5':5,'0':99,'5':100,'10':95,'15':93,'20':89,'25':88,'30':89},
+  'QAM64':   {'-10':0,'-5':34,'0':0,'5':0,'10':1,'15':4,'20':6,'25':8,'30':8},
+  'P25_C4FM':{'-10':0,'-5':0,'0':59,'5':51,'10':60,'15':64,'20':67,'25':61,'30':61},
+  'POCSAG':  {'-10':0,'-5':0,'0':8,'5':99,'10':100,'15':100,'20':100,'25':99,'30':97},
+};
+
+function interpConf(mod, snr) {
+  const d = SNR_DATA[mod];
+  if (!d) return 50;
+  const keys = [-10,-5,0,5,10,15,20,25,30];
+  if (snr <= -10) return d['-10'] || 0;
+  if (snr >= 30)  return d['30']  || 0;
+  const lo = keys.reduce((a,k) => k <= snr ? k : a, -10);
+  const hi = keys.find(k => k > snr) || 30;
+  const f = (snr - lo) / (hi - lo);
+  return (d[String(lo)] || 0) * (1-f) + (d[String(hi)] || 0) * f;
+}
+
+function updateConf() {
+  const snr = parseInt(document.getElementById('snr-slider').value);
+  const mod = document.getElementById('snr-mod').value;
+  document.getElementById('snr-val').textContent = (snr >= 0 ? '+' : '') + snr;
+  const conf = interpConf(mod, snr);
+  const fill = document.getElementById('conf-fill');
+  fill.style.width = conf + '%';
+  fill.style.background = conf >= 75 ? 'var(--green)' : conf >= 40 ? 'var(--orange)' : 'var(--red)';
+  const res = document.getElementById('snr-result');
+  res.className = 'result-box' + (conf >= 75 ? '' : conf >= 40 ? ' warn' : ' err');
+  const path = conf >= 75 ? 'fast path (5 ms ONNX)' : conf >= 40 ? 'may trigger slow path (80 ms feature extraction)' : 'likely slow path or UNKNOWN';
+  res.textContent = `Estimated confidence: ${conf.toFixed(0)}%  |  ${path}`;
+}
+document.getElementById('snr-slider').addEventListener('input', updateConf);
+document.getElementById('snr-mod').addEventListener('change', updateConf);
+updateConf();
+
+// ── Bandwidth calculator ───────────────────────────────────────────────────────
+function calcBw() {
+  const mod = document.getElementById('bw-mod').value;
+  const sym = parseFloat(document.getElementById('bw-sym').value) * 1e3;
+  const dev = parseFloat(document.getElementById('bw-dev').value) * 1e3;
+  if (!sym) return;
+  let bw, bps, note = '';
+  if (mod.includes('fsk')) {
+    const nTones = mod === '2fsk' ? 2 : 4;
+    const bits = Math.log2(nTones);
+    bps = sym * bits;
+    // Carson's rule for FSK: BW ≈ 2*(deviation + symbol_rate/2)
+    bw = 2 * (dev + sym/2);
+    note = `Carson's rule: BW ≈ 2×(Δf + fs/2)`;
+  } else {
+    const order = parseInt(mod);
+    const bits = Math.log2(order);
+    bps = sym * bits;
+    // Nyquist: BW ≈ symbol_rate (with RRC filter)
+    bw = sym;
+    note = `Nyquist bandwidth (with RRC pulse shaping, roll-off α≈0.35: ×1.35)`;
+  }
+  const el = document.getElementById('bw-result');
+  el.textContent = `Bit rate: ${(bps/1e3).toFixed(2)} kbps  |  Min bandwidth: ${(bw/1e3).toFixed(2)} kHz  |  ${note}`;
+}
+document.getElementById('bw-mod').addEventListener('change', calcBw);
+document.getElementById('bw-sym').addEventListener('input', calcBw);
+document.getElementById('bw-dev').addEventListener('input', calcBw);
+calcBw();
+
+// ── Sweep time ────────────────────────────────────────────────────────────────
+function calcSweep() {
+  const start = parseFloat(document.getElementById('sw-start').value) * 1e6;
+  const stop  = parseFloat(document.getElementById('sw-stop').value) * 1e6;
+  const sr    = parseFloat(document.getElementById('sw-sr').value) * 1e6;
+  const bwf   = parseFloat(document.getElementById('sw-bw').value);
+  if (!start || !stop || !sr || stop <= start) return;
+  const span = stop - start;
+  const usable_bw = sr * bwf;
+  const n_steps = Math.ceil(span / usable_bw);
+  // Each step: collect 4096 samples at full rate
+  const dwell_ms = 4096 / sr * 1000;
+  const total_ms = n_steps * dwell_ms;
+  const el = document.getElementById('sw-result');
+  el.textContent = `Span: ${(span/1e6).toFixed(0)} MHz  |  Steps: ${n_steps}  |  Dwell/step: ${dwell_ms.toFixed(1)} ms  |  Full sweep: ${(total_ms/1000).toFixed(1)} s`;
+}
+['sw-start','sw-stop','sw-sr','sw-bw'].forEach(id => document.getElementById(id).addEventListener('input', calcSweep));
+calcSweep();
+
+function setActive() {
+  const th = window.scrollY + 160;
+  let cur = null, mx = -Infinity;
+  document.querySelectorAll('#nav a[href^="#"]').forEach(a => {
+    const el = document.getElementById(a.getAttribute('href').slice(1));
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY;
+    if (top <= th && top > mx) { mx = top; cur = a; }
+  });
+  document.querySelectorAll('#nav a').forEach(a => a.classList.remove('active'));
+  if (cur) cur.classList.add('active');
+}
+window.addEventListener('scroll', setActive, {passive:true});
+window.addEventListener('load', setActive);
+</script>
+</body>
+</html>
