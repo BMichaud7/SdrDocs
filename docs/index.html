@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>API Documentation — Open RF Stack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../style.css">
+<style>
+.doc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:1rem; margin:1.2rem 0 }
+.doc-card {
+  background:var(--bg2); border:1px solid var(--bd); border-radius:var(--r);
+  padding:1.1rem 1.2rem; text-decoration:none; display:block;
+  transition:border-color .15s, background .15s;
+}
+.doc-card:hover { border-color:var(--blue); background:rgba(79,158,255,.04); text-decoration:none }
+.doc-card h3 { color:#fff; font-size:.95rem; margin:0 0 .3rem; font-weight:600 }
+.doc-card .lang { font-size:.72rem; font-family:'JetBrains Mono',monospace; color:var(--blue); margin-bottom:.4rem; display:block }
+.doc-card p { color:var(--muted); font-size:.8rem; margin:0; line-height:1.55 }
+.doc-card .status { font-size:.7rem; color:var(--dim); margin-top:.5rem; font-family:'JetBrains Mono',monospace }
+.badge-new { background:rgba(63,185,80,.15); color:var(--green); border:1px solid rgba(63,185,80,.3); padding:.1rem .45rem; border-radius:2rem; font-size:.68rem; font-weight:700; margin-left:.4rem }
+</style>
+</head>
+<body>
+
+<nav id="nav" style="padding-top:.75rem">
+  <a class="nav-logo" href="../index.html"><span>📡</span> Open RF Stack</a>
+  <div class="nav-sep">API Docs</div>
+  <a href="#core">Core</a>
+  <a href="#apps">Applications</a>
+  <a href="#library">Library</a>
+  <div class="nav-sep">Pages</div>
+  <a href="../index.html">← Documentation</a>
+  <a href="../accuracy.html">Accuracy Charts</a>
+  <a href="../spectrograms.html">Spectrograms</a>
+  <a href="../tools.html">Calculators</a>
+</nav>
+
+<header>
+  <div class="hdr">
+    <div class="hdr-top">
+      <div class="logo-wrap">📖</div>
+      <div>
+        <h1>API Documentation</h1>
+        <p>Auto-generated Doxygen HTML for all OpenRFStack components. Updated automatically on every push to <code>main/1.0</code> by GitHub Actions.</p>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section id="core">
+<h2>Core Infrastructure</h2>
+<div class="doc-grid">
+  <a class="doc-card" href="SdrResourceManager/">
+    <h3>SdrResourceManager</h3>
+    <span class="lang">C++20</span>
+    <p>Hardware broker, IQ scheduler, port pool, preemption, shared-LO fan-out. Central to the entire stack.</p>
+    <div class="status">IQStreamer · ResourceManager · ScanExecutor · TriggerMonitor · SpectrumTimeline · Ddc · UdpPortPool</div>
+  </a>
+  <a class="doc-card" href="SdrTaskApi/">
+    <h3>SdrTaskApi</h3>
+    <span class="lang">C++20</span>
+    <p>Shared message types used by every component — TaskRequest, TaskResponse, AssignedStream, MessageCodec. Au units throughout.</p>
+    <div class="status">Types · MessageCodec · IqPacketHeader</div>
+  </a>
+</div>
+</section>
+
+<section id="apps">
+<h2>Applications</h2>
+<div class="doc-grid">
+  <a class="doc-card" href="AcquisitionApp/">
+    <h3>AcquisitionApp</h3>
+    <span class="lang">C++20</span>
+    <p>Spectrum scanner — Welch FFT, CA-CFAR detection, persistence filter, sub-bin interpolation, P25 voice following, GPS threat monitoring.</p>
+    <div class="status">SpectrumScanner · FftProcessor · DetectionDb · GpsMonitor · AlertStore · P25Db</div>
+  </a>
+  <a class="doc-card" href="AnalysisApp/">
+    <h3>AnalysisApp</h3>
+    <span class="lang">C++20</span>
+    <p>47-class automatic modulation recognition. Fast ONNX path (5 ms) + slow feature path (80 ms). DAE low-SNR variant.</p>
+    <div class="status">AnalysisEngine · OnnxClassifier · Config · AnalysisResult</div>
+  </a>
+  <a class="doc-card" href="DemodApp/">
+    <h3>DemodApp</h3>
+    <span class="lang">C++20</span>
+    <p>25+ protocol demodulators. P25 control channel decode, encryption detection, threat validators (ADS-B, AIS, EAS, DSC).</p>
+    <div class="status">DemodRouter · DemodService · IDemod · P25ControlDecoder · AlertPublisher</div>
+  </a>
+  <a class="doc-card" href="DfApp/">
+    <h3>DfApp</h3>
+    <span class="lang">C++20</span>
+    <p>Direction finding via MUSIC algorithm. Multi-element UCA, eigendecomposition, 0.5° sweep. &lt;2° RMS at SNR 25 dB.</p>
+    <div class="status">DfEngine · DfService · MusicAlgorithm</div>
+  </a>
+  <a class="doc-card" href="SpeechApp/">
+    <h3>SpeechApp</h3>
+    <span class="lang">C++20</span>
+    <p>Voice transcription — EnergyVad gate + whisper.cpp C++ GGML inference. SQLite transcript store + rolling daily text logs.</p>
+    <div class="status">WhisperTranscriber · EnergyVad · TranscriptStore · Resampler · Config</div>
+  </a>
+  <a class="doc-card" href="SdrScanner/">
+    <h3>SdrScanner</h3>
+    <span class="lang">C++20 · Qt6</span>
+    <p>Cross-platform real-time spectrum viewer. Subscribes to rf.detections and rf.analysis for live signal display.</p>
+    <div class="status">Qt6 GUI · Live signal table · AMQP subscriber</div>
+  </a>
+  <a class="doc-card" href="SdrScripts/">
+    <h3>SdrScripts</h3>
+    <span class="lang">Bash · Podman</span>
+    <p>Container orchestration, hardware test configs, Kubernetes manifests. Main entry point via scan.sh.</p>
+    <div class="status">scan.sh · deploy.sh · sdr.sh · k8s manifests</div>
+  </a>
+</div>
+</section>
+
+<section id="library">
+<h2>Library</h2>
+<div class="doc-grid">
+  <a class="doc-card" href="SdrSdk/">
+    <h3>SdrSdk</h3>
+    <span class="lang">C++20</span>
+    <p>C++ client library for SDR applications — task submission, IQ streaming, spectrum analysis. Au units compile-time safety.</p>
+    <div class="status">SdrClient · IqStream · Spectrum · units.hpp</div>
+  </a>
+</div>
+</section>
+
+<div class="callout" style="margin-top:2rem">
+<strong>Auto-updated by CI:</strong> These docs are regenerated and deployed automatically on every push to <code>main/1.0</code> via <a href="https://github.com/OpenRFStack">GitHub Actions</a>. If a repo was just pushed, allow 2–3 minutes for the docs workflow to complete.
+</div>
+
+</main>
+
+<footer>
+  <span>Open RF Stack · API docs generated by Doxygen · Auto-deployed from GitHub Actions</span>
+  <div class="footer-links">
+    <a href="../index.html">Main Docs</a>
+    <a href="https://github.com/OpenRFStack">GitHub</a>
+  </div>
+</footer>
+
+<script>
+function setActive() {
+  const th = window.scrollY + 160;
+  let cur = null, mx = -Infinity;
+  document.querySelectorAll('#nav a[href^="#"]').forEach(a => {
+    const el = document.getElementById(a.getAttribute('href').slice(1));
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY;
+    if (top <= th && top > mx) { mx = top; cur = a; }
+  });
+  document.querySelectorAll('#nav a').forEach(a => a.classList.remove('active'));
+  if (cur) cur.classList.add('active');
+}
+window.addEventListener('scroll', setActive, {passive:true});
+window.addEventListener('load', setActive);
+</script>
+</body>
+</html>
