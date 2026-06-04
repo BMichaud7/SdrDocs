@@ -1660,8 +1660,20 @@ FROM p25_channels GROUP BY encrypted, alg_name;</code></pre>
 <p>The <a href="https://www.radioreference.com">RadioReference database</a> lists all licensed P25 systems with control channel frequencies. Look up your county or city. Alternatively, run a spectrum scan and look for a 12.5 kHz flat-top signal near 851–869 MHz (800 MHz P25) or 769–806 MHz (700 MHz) that is always on — P25 control channels are continuous, unlike voice channels which are intermittent. Query <code>SELECT freq_mhz, hits FROM recent_signals WHERE bw_khz BETWEEN 10 AND 15 ORDER BY hits DESC</code> to find candidates.</p>
 </details>
 
-<details class="faq-item"><summary>Can I run multiple AcquisitionApp instances against the same stack?</summary>
-<p>Yes — each instance gets its own <code>scanner_id</code> and submits independent task requests to the Resource Manager. The Resource Manager schedules them across available hardware. Detection messages from each instance are published to <code>rf.detections</code> with the originating <code>scanner_id</code> field set. All instances share the same AMQP broker, AnalysisApp, and database.</p>
+<details class="faq-item"><summary>Why would I run multiple AcquisitionApp instances?</summary>
+<p>Each instance drives one sweep plan — one set of frequencies, one scan pattern, one <code>scanner_id</code>. Multiple instances are useful in four situations:</p>
+<ul>
+  <li><strong>Multiple physical SDRs</strong> — one RTL-SDR covers 70 MHz–1.7 GHz, a HackRF covers 1–6 GHz. Two instances, each submitting tasks for their device. The Resource Manager assigns tasks to the right hardware automatically based on frequency range.</li>
+  <li><strong>Geographic distribution</strong> — one instance on a hilltop (remote site over ethernet), another at the base station. Both publish detections to the same AMQP broker and PostgreSQL, distinguished by <code>scanner_id</code>.</li>
+  <li><strong>Parallel P25 + wideband sweep</strong> — one instance dedicated to following P25 voice grants (high-priority narrowband tasks), another doing the broad spectrum sweep. Prevents the sweep being interrupted every time a P25 grant fires.</li>
+  <li><strong>Band splitting for speed</strong> — sweeping 70 MHz–1 GHz takes ~7.5 s. Split across two instances and two SDRs (70–500 MHz / 500 MHz–1 GHz) and full coverage completes in ~3.5 s.</li>
+</ul>
+<p>All instances share the same Resource Manager, AMQP broker, AnalysisApp, DemodApp, and database. Every detection appears in the same <code>signals</code> table, labelled by <code>scanner_id</code>.</p>
+<pre><code class="language-sql">-- See which scanner detected each signal
+SELECT scanner_id, count(*), round(avg(snr_db)::numeric,1) AS avg_snr
+FROM signals
+WHERE last_seen > now() - INTERVAL '1 hour'
+GROUP BY scanner_id;</code></pre>
 </details>
 
 </div>
