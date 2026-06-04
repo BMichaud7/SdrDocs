@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Signal Spectrograms — Open RF Stack</title>
+<meta name="description" content="Synthetic spectrograms showing the time-frequency signature of each supported protocol.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+.sgram-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.2rem;
+  margin: 1.2rem 0;
+}
+.sgram-card {
+  background: var(--bg2); border: 1px solid var(--bd);
+  border-radius: var(--r); overflow: hidden;
+  transition: border-color .15s;
+}
+.sgram-card:hover { border-color: var(--blue) }
+.sgram-canvas { display: block; width: 100%; height: 160px }
+.sgram-info { padding: .75rem 1rem }
+.sgram-info h4 { color: #fff; font-size: .92rem; margin: 0 0 .2rem; text-transform: none; letter-spacing: 0 }
+.sgram-meta { font-size: .74rem; color: var(--blue); font-family: 'JetBrains Mono', monospace; margin-bottom: .3rem }
+.sgram-desc { font-size: .78rem; color: var(--muted); margin: 0 }
+.legend {
+  display: flex; gap: 1rem; align-items: center;
+  font-size: .75rem; color: var(--muted); margin: .5rem 0 1.2rem;
+}
+.legend-bar {
+  width: 200px; height: 12px; border-radius: 3px;
+  background: linear-gradient(to right, #000066, #0000ff, #0066ff, #00ffff, #66ff00, #ffff00, #ff6600, #ff0000, #ffffff);
+}
+.filter-row { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1.2rem }
+.filter-btn { padding: .22rem .7rem; border-radius: 2rem; font-size: .75rem; font-weight: 600;
+  border: 1px solid var(--bd2); background: var(--bg3); color: var(--muted); cursor: pointer; transition: all .12s }
+.filter-btn.active { background: rgba(79,158,255,.15); border-color: var(--blue); color: var(--blue) }
+.filter-btn:hover { border-color: var(--blue); color: var(--blue) }
+</style>
+</head>
+<body>
+
+<nav id="nav" style="padding-top:.75rem">
+  <a class="nav-logo" href="index.html"><span>📡</span> Open RF Stack</a>
+  <div class="nav-sep">Spectrograms</div>
+  <a href="#analog">Analog voice</a>
+  <a href="#digital">Digital modulation</a>
+  <a href="#protocols">Protocols</a>
+  <a href="#waveforms">Waveforms</a>
+  <div class="nav-sep">Pages</div>
+  <a href="index.html">← Documentation</a>
+  <a href="accuracy.html">Accuracy Charts</a>
+</nav>
+
+<header>
+  <div class="hdr">
+    <div class="hdr-top">
+      <div class="logo-wrap">🌊</div>
+      <div>
+        <h1>Signal Spectrograms</h1>
+        <p>Synthetic time-frequency spectrograms showing the visual signature of each supported protocol. X-axis = time, Y-axis = frequency, color = power (blue = low, red/white = high). Generated from the same mathematical models used for ML training data.</p>
+      </div>
+    </div>
+    <div class="legend">
+      <span>Power: low</span>
+      <div class="legend-bar"></div>
+      <span>high</span>
+      <span style="margin-left:1rem;color:var(--dim)">Hover a card to pause animation</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<div class="filter-row" id="filterRow">
+  <button class="filter-btn active" data-cat="all">All protocols</button>
+  <button class="filter-btn" data-cat="analog">Analog</button>
+  <button class="filter-btn" data-cat="digital">Digital mod</button>
+  <button class="filter-btn" data-cat="protocol">Protocols</button>
+  <button class="filter-btn" data-cat="waveform">Waveforms</button>
+</div>
+
+<div class="sgram-grid" id="sgramGrid"></div>
+
+<section style="margin-top:2rem">
+<h2>Reading a Spectrogram</h2>
+<div class="feat-grid">
+  <div class="feat"><strong>Constant energy = continuous carrier</strong><p>FM, AM, PSK, QAM signals occupy a fixed bandwidth continuously. The spectrogram shows a steady block whose width = signal bandwidth.</p></div>
+  <div class="feat"><strong>Discrete lines = FSK tones</strong><p>FSK and 4FSK show as 2 or 4 distinct horizontal lines — one per tone. Switching between them creates vertical transitions in time.</p></div>
+  <div class="feat"><strong>Diagonal stripe = chirp (LFM/CSS)</strong><p>Linear Frequency Modulated signals sweep across frequency vs time, producing a diagonal line. The slope = chirp rate (Hz/s).</p></div>
+  <div class="feat"><strong>Flat rectangle = PSK/QAM</strong><p>Higher-order constellations (QPSK, 8PSK, QAM256) have nearly flat power spectral density within their bandwidth — hard to distinguish visually, which is why ML is needed.</p></div>
+  <div class="feat"><strong>Burst pattern = ADS-B / PPM</strong><p>Mode S transponders transmit short bursts (~120 μs). The spectrogram shows intermittent bright flashes — very distinctive vs continuous signals.</p></div>
+  <div class="feat"><strong>Subcarrier lines = OFDM</strong><p>OFDM signals have a flat rectangular envelope with faint vertical striping from individual subcarriers. The cyclic prefix creates subtle horizontal structure at the block boundaries.</p></div>
+</div>
+</section>
+
+</main>
+
+<footer>
+  <span>Open RF Stack · Spectrograms are synthetic — generated from mathematical signal models matching ML training data</span>
+  <div class="footer-links"><a href="index.html">Documentation</a><a href="accuracy.html">Accuracy Charts</a></div>
+</footer>
+
+<script>
+'use strict';
+
+// ── Color map: inferno-like (black → purple → red → orange → yellow → white) ─
+function inferno(t) {
+  t = Math.max(0, Math.min(1, t));
+  const c = [
+    [0,0,4], [40,11,84], [101,21,110], [159,42,99],
+    [212,72,66], [245,125,21], [252,189,44], [252,255,164],
+  ];
+  const i = t * (c.length - 1);
+  const lo = Math.floor(i), hi = Math.min(lo + 1, c.length - 1);
+  const f = i - lo;
+  return c[lo].map((v, j) => Math.round(v + f * (c[hi][j] - v)));
+}
+
+// ── Signal generators ─────────────────────────────────────────────────────────
+// Each returns a 2D array [timeStep][freqBin] of power in dB (-80 to 0)
+
+function rng(seed) {
+  let s = seed;
+  return () => { s ^= s << 13; s ^= s >> 17; s ^= s << 5; return (s >>> 0) / 4294967296; };
+}
+
+function gaussian(bins, centre, sigma, amplitude) {
+  const out = new Float32Array(bins);
+  for (let i = 0; i < bins; i++)
+    out[i] = amplitude * Math.exp(-0.5 * ((i - centre) / sigma) ** 2);
+  return out;
+}
+
+function noiseFloor(bins, r, noise_db = -75) {
+  const out = new Float32Array(bins);
+  for (let i = 0; i < bins; i++) out[i] = noise_db + (r() - 0.5) * 4;
+  return out;
+}
+
+function makeFmWb(T, F, r) {
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    const phase = 0.15 * Math.sin(2 * Math.PI * t / (T * 0.8));
+    const cf = F/2 + phase * F * 0.25;
+    for (let f = 0; f < F; f++) {
+      const d = Math.abs(f - cf) / (F * 0.18);
+      if (d < 1) row[f] = Math.max(row[f], -5 - 15 * d * d);
+    }
+    return row;
+  });
+}
+
+function makeFmNb(T, F, r) {
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    const audio = Math.sin(2 * Math.PI * t / 20);
+    const cf = F/2 + audio * F * 0.025;
+    for (let f = 0; f < F; f++) {
+      const d = Math.abs(f - cf) / (F * 0.035);
+      if (d < 1) row[f] = Math.max(row[f], -4 - 18 * d * d);
+    }
+    return row;
+  });
+}
+
+function makeAm(T, F, r) {
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    const env = 0.7 + 0.3 * Math.sin(2 * Math.PI * t / 25);
+    // Carrier
+    const cf = F / 2;
+    row[Math.round(cf)] = Math.max(row[Math.round(cf)], -3);
+    // Sidebands
+    const bw = F * 0.04;
+    for (let f = 0; f < F; f++) {
+      const dl = Math.abs(f - (cf - bw));
+      const du = Math.abs(f - (cf + bw));
+      const dm = Math.min(dl, du);
+      if (dm < F * 0.012) row[f] = Math.max(row[f], -8 * env - 10 * (dm / (F * 0.012)) ** 2);
+    }
+    return row;
+  });
+}
+
+function makeAmSsb(T, F, r, upper) {
+  const cf = F / 2;
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    const audio = 0.5 + 0.5 * Math.sin(2 * Math.PI * t / 30);
+    for (let f = 0; f < F; f++) {
+      const rel = upper ? (f - cf) : (cf - f);
+      if (rel > 0 && rel < F * 0.06) {
+        const taper = 1 - rel / (F * 0.06);
+        row[f] = Math.max(row[f], -6 - 8 * (1 - taper * audio));
+      }
+    }
+    return row;
+  });
+}
+
+function makePsk(T, F, r, width, noise=8) {
+  return Array.from({length: T}, () => {
+    const row = noiseFloor(F, r);
+    const cf = F / 2;
+    const hw = F * width;
+    for (let f = 0; f < F; f++) {
+      const d = Math.abs(f - cf);
+      if (d < hw) row[f] = Math.max(row[f], -5 - (noise * (d / hw)) - r() * 3);
+    }
+    return row;
+  });
+}
+
+function makeFsk(T, F, r, nTones, shift) {
+  const tones = Array.from({length: nTones}, (_, i) =>
+    Math.round(F * 0.3 + i * (F * shift)));
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    const tone = tones[Math.floor(t / 6) % nTones];
+    for (let f = 0; f < F; f++) {
+      const d = Math.abs(f - tone);
+      if (d < F * 0.03) row[f] = Math.max(row[f], -4 - 30 * (d / (F * 0.03)));
+    }
+    return row;
+  });
+}
+
+function makeGmsk(T, F, r) {
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    const cf = F / 2;
+    const drift = Math.sin(2 * Math.PI * t / T) * F * 0.01;
+    for (let f = 0; f < F; f++) {
+      const d = Math.abs(f - cf - drift);
+      if (d < F * 0.04) row[f] = Math.max(row[f], -4 - 22 * (d / (F * 0.04)) ** 1.5);
+    }
+    return row;
+  });
+}
+
+function makeOfdm(T, F, r) {
+  const nSub = 32;
+  const subWidth = Math.floor(F * 0.35 / nSub);
+  const start = Math.floor(F * 0.325);
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    for (let s = 0; s < nSub; s++) {
+      const fc = start + s * subWidth + subWidth / 2;
+      const pwr = -5 - r() * 3;
+      for (let f = 0; f < F; f++) {
+        const d = Math.abs(f - fc);
+        if (d < subWidth * 0.45) row[f] = Math.max(row[f], pwr);
+      }
+    }
+    return row;
+  });
+}
+
+function makeLfm(T, F, r) {
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    const cf = F * 0.15 + (t / T) * F * 0.65;
+    for (let f = 0; f < F; f++) {
+      const d = Math.abs(f - cf);
+      if (d < F * 0.025) row[f] = Math.max(row[f], -4 - 35 * (d / (F * 0.025)));
+    }
+    return row;
+  });
+}
+
+function makeCss(T, F, r) {
+  // Chirp spread spectrum: multiple chirps stacked
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    for (let chip = 0; chip < 4; chip++) {
+      const phase = (chip * T / 4 + t) % T;
+      const cf = F * 0.15 + (phase / T) * F * 0.65;
+      for (let f = 0; f < F; f++) {
+        const d = Math.abs(f - cf);
+        if (d < F * 0.018) row[f] = Math.max(row[f], -6 - 30 * (d / (F * 0.018)));
+      }
+    }
+    return row;
+  });
+}
+
+function makePocsag(T, F, r) {
+  // POCSAG: 2-FSK paging, burst with sync codewords
+  const f0 = Math.round(F * 0.38), f1 = Math.round(F * 0.62);
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    const inBurst = (t % 20) < 16;
+    if (!inBurst) return row;
+    const bit = (Math.floor(t / 2) & 1) ? f1 : f0;
+    for (let f = 0; f < F; f++) {
+      const d = Math.abs(f - bit);
+      if (d < F * 0.025) row[f] = Math.max(row[f], -4 - 28 * (d / (F * 0.025)));
+    }
+    return row;
+  });
+}
+
+function makeAdsb(T, F, r) {
+  // ADS-B: PPM pulse bursts, wideband
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    const inFrame = (t % 18) < 6;
+    if (!inFrame) return row;
+    const bit = (Math.floor(t / 1.5) & 1);
+    const fc = F / 2;
+    for (let f = 0; f < F; f++) {
+      const d = Math.abs(f - fc);
+      if (d < F * 0.35 && bit) row[f] = Math.max(row[f], -5 - 4 * (d / (F * 0.35)));
+    }
+    return row;
+  });
+}
+
+function makeAis(T, F, r) {
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    const cf = F / 2;
+    const dev = F * 0.018 * (Math.sin(2 * Math.PI * t / 4) > 0 ? 1 : -1);
+    for (let f = 0; f < F; f++) {
+      const d = Math.abs(f - cf - dev);
+      if (d < F * 0.02) row[f] = Math.max(row[f], -4 - 25 * (d / (F * 0.02)) ** 1.3);
+    }
+    return row;
+  });
+}
+
+function makeP25(T, F, r) {
+  // 4FSK C4FM: 4 tones at ±600, ±1800 Hz
+  const tones = [0.38, 0.44, 0.56, 0.62].map(x => Math.round(x * F));
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    const tone = tones[Math.floor(Math.random() * 4)];
+    for (let f = 0; f < F; f++) {
+      const d = Math.abs(f - tone);
+      if (d < F * 0.022) row[f] = Math.max(row[f], -5 - 32 * (d / (F * 0.022)));
+    }
+    return row;
+  });
+}
+
+function makeCw(T, F, r) {
+  // CW/Morse: narrow tone with on/off keying
+  const morse = [1,1,1,0,1,0,0,1,1,1,0,0,0,1,0,1,1,1,0,1,0];
+  const cf = Math.round(F * 0.48);
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    const on = morse[Math.floor(t / 3) % morse.length];
+    if (!on) return row;
+    for (let f = 0; f < F; f++) {
+      const d = Math.abs(f - cf);
+      if (d < F * 0.012) row[f] = Math.max(row[f], -3 - 60 * (d / (F * 0.012)) ** 2);
+    }
+    return row;
+  });
+}
+
+function makeDmr(T, F, r) {
+  // DMR: 4FSK TDMA — alternating timeslots with guard periods
+  const tones = [0.34, 0.43, 0.57, 0.66].map(x => Math.round(x * F));
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    const slot = Math.floor(t / (T / 6));
+    const inSlot = (slot % 2 === 0);
+    if (!inSlot) return row;
+    const tone = tones[Math.floor(Math.random() * 4)];
+    for (let f = 0; f < F; f++) {
+      const d = Math.abs(f - tone);
+      if (d < F * 0.02) row[f] = Math.max(row[f], -5 - 28 * (d / (F * 0.02)));
+    }
+    return row;
+  });
+}
+
+function makeTone(T, F, r) {
+  const cf = Math.round(F * 0.5);
+  return Array.from({length: T}, () => {
+    const row = noiseFloor(F, r);
+    for (let f = 0; f < F; f++) {
+      const d = Math.abs(f - cf);
+      if (d < F * 0.006) row[f] = Math.max(row[f], -2 - 80 * (d / (F * 0.006)) ** 2);
+    }
+    return row;
+  });
+}
+
+function makeQam256(T, F, r) {
+  // Very flat, dense constellation — nearly indistinguishable from BPSK visually
+  return Array.from({length: T}, () => {
+    const row = noiseFloor(F, r, -72);
+    const cf = F / 2, hw = F * 0.07;
+    for (let f = 0; f < F; f++) {
+      const d = Math.abs(f - cf);
+      if (d < hw) row[f] = Math.max(row[f], -6 - r() * 2);
+    }
+    return row;
+  });
+}
+
+function makeRtty(T, F, r) {
+  // RTTY: 2-FSK 45 baud ±85 Hz — very slow, narrow
+  const f0 = Math.round(F * 0.42), f1 = Math.round(F * 0.58);
+  return Array.from({length: T}, (_, t) => {
+    const row = noiseFloor(F, r);
+    const bit = Math.floor(t / 8) & 1;
+    const fc = bit ? f1 : f0;
+    for (let f = 0; f < F; f++) {
+      const d = Math.abs(f - fc);
+      if (d < F * 0.018) row[f] = Math.max(row[f], -5 - 30 * (d / (F * 0.018)));
+    }
+    return row;
+  });
+}
+
+// ── Signal catalogue ──────────────────────────────────────────────────────────
+const SIGNALS = [
+  // Analog
+  { id:'fm-wb',  name:'FM Wideband',       meta:'±75 kHz · 87.5–108 MHz',  cat:'analog',    gen:(T,F,r)=>makeFmWb(T,F,r),           desc:'Broadcast FM — wide deviation, constant bandwidth. Stereo pilot at 19 kHz visible as faint secondary line.' },
+  { id:'fm-nb',  name:'FM Narrowband',      meta:'±2.5–5 kHz · LMR',        cat:'analog',    gen:(T,F,r)=>makeFmNb(T,F,r),           desc:'Land mobile/VHF FM — much narrower than broadcast. Modulation causes small frequency deviation on carrier.' },
+  { id:'am-dsb', name:'AM (DSB)',            meta:'Carrier + sidebands',      cat:'analog',    gen:(T,F,r)=>makeAm(T,F,r),             desc:'Amplitude modulation — strong carrier line at centre, symmetric sidebands on each side. Easy to identify.' },
+  { id:'am-ssb', name:'AM-SSB (USB)',        meta:'Upper sideband only',      cat:'analog',    gen:(T,F,r)=>makeAmSsb(T,F,r,true),    desc:'Single sideband — only the upper sideband is transmitted. No carrier line. Used in HF/aviation.' },
+
+  // Digital modulation
+  { id:'bpsk',   name:'BPSK',               meta:'1 bit/sym · narrow',       cat:'digital',   gen:(T,F,r)=>makePsk(T,F,r,0.04,12),   desc:'Binary PSK — very narrow rectangular spectrum. Flat energy within bandwidth. Similar to QPSK visually.' },
+  { id:'qpsk',   name:'QPSK',               meta:'2 bit/sym',                 cat:'digital',   gen:(T,F,r)=>makePsk(T,F,r,0.06,10),   desc:'Quadrature PSK — slightly wider than BPSK. Flat rectangular PSD. Very common in satellite and digital comms.' },
+  { id:'8psk',   name:'8PSK',               meta:'3 bit/sym',                 cat:'digital',   gen:(T,F,r)=>makePsk(T,F,r,0.08,9),    desc:'8-point constellation — same bandwidth as QPSK at same symbol rate but harder to separate at low SNR.' },
+  { id:'qam256', name:'QAM256',             meta:'8 bit/sym · dense',         cat:'digital',   gen:(T,F,r)=>makeQam256(T,F,r),         desc:'256-QAM — very flat spectrum, nearly impossible to visually distinguish from QPSK. ML is needed.' },
+  { id:'fsk',    name:'2-FSK',              meta:'2 tones · paging/data',     cat:'digital',   gen:(T,F,r)=>makeFsk(T,F,r,2,0.12),    desc:'Two-tone FSK — alternates between two discrete frequencies. Distinctive double-line pattern.' },
+  { id:'4fsk',   name:'4-FSK',              meta:'4 tones · P25/DMR/NXDN',   cat:'digital',   gen:(T,F,r)=>makeFsk(T,F,r,4,0.06),    desc:'Four-tone FSK used in P25 C4FM, DMR, NXDN. Four discrete spectral lines, each equally spaced.' },
+  { id:'gmsk',   name:'GMSK',               meta:'Gaussian filter · AIS/GSM', cat:'digital',   gen:(T,F,r)=>makeGmsk(T,F,r),           desc:'GMSK — smooth continuous-phase FSK with Gaussian filter. Compact spectrum, no discrete tone lines.' },
+  { id:'ofdm',   name:'OFDM',               meta:'Multicarrier · flat top',   cat:'digital',   gen:(T,F,r)=>makeOfdm(T,F,r),           desc:'OFDM — rectangular flat spectrum from many parallel subcarriers. Very distinctive flat top with sharp edges.' },
+  { id:'ook',    name:'OOK',                meta:'On-off keying',             cat:'digital',   gen:(T,F,r)=>{const g=makeFsk(T,F,r,1,0); return g.map((row,t)=>{if(Math.floor(t/5)%2===0)return row; return noiseFloor(F,r);});}, desc:'On-off keying — signal present = 1, absent = 0. Shows as intermittent bursts at a single frequency.' },
+  { id:'rtty',   name:'RTTY',               meta:'45 baud · ±85 Hz · HF',    cat:'digital',   gen:(T,F,r)=>makeRtty(T,F,r),           desc:'Radioteletype — very slow 2-FSK. Narrow spacing (±85 Hz), slow transitions. Common on HF utility bands.' },
+
+  // Protocols
+  { id:'p25',    name:'P25 C4FM',           meta:'4FSK · 4800 sym/s · 12.5 kHz', cat:'protocol', gen:(T,F,r)=>makeP25(T,F,r),        desc:'P25 Phase 1 — 4-level FSK with ±600/±1800 Hz deviation. Four spectral clusters at fixed offset from centre.' },
+  { id:'dmr',    name:'DMR',                meta:'4FSK TDMA · 2 slots',      cat:'protocol',  gen:(T,F,r)=>makeDmr(T,F,r),            desc:'DMR TDMA — two time slots alternating. Signal present for half the time per user. Similar spectral shape to P25.' },
+  { id:'ais',    name:'AIS',                meta:'GMSK 9600 bps · 161 MHz',  cat:'protocol',  gen:(T,F,r)=>makeAis(T,F,r),            desc:'AIS — GMSK vessel tracking. Continuous smooth spectrum. Bursts from individual vessels appear as brief spikes.' },
+  { id:'pocsag', name:'POCSAG',             meta:'2-FSK · paging bursts',    cat:'protocol',  gen:(T,F,r)=>makePocsag(T,F,r),         desc:'POCSAG — 2-FSK paging. Transmitted in bursts (preamble + codewords) with quiet periods between batches.' },
+  { id:'adsb',   name:'ADS-B Mode S',       meta:'PPM · 1090 MHz · bursts',  cat:'protocol',  gen:(T,F,r)=>makeAdsb(T,F,r),           desc:'ADS-B — pulse-position modulated bursts. Very short (120 μs) wideband pulses from aircraft transponders.' },
+  { id:'cw',     name:'CW / Morse',         meta:'OOK · narrow tone',        cat:'protocol',  gen:(T,F,r)=>makeCw(T,F,r),             desc:'CW Morse — extremely narrow carrier with on/off keying. Dot-dash pattern visible in time domain.' },
+
+  // Waveforms
+  { id:'lfm',    name:'LFM / Chirp',        meta:'Linear frequency sweep',   cat:'waveform',  gen:(T,F,r)=>makeLfm(T,F,r),            desc:'Linear FM chirp — frequency sweeps linearly over time. Distinctive diagonal stripe in the spectrogram.' },
+  { id:'css',    name:'CSS (Chirp Spread)', meta:'LoRa-style · spread spectrum', cat:'waveform', gen:(T,F,r)=>makeCss(T,F,r),         desc:'Chirp spread spectrum (LoRa-style) — multiple simultaneous chirps spread across bandwidth. Very robust to noise.' },
+  { id:'tone',   name:'Continuous Tone',    meta:'Single CW tone · narrow',  cat:'waveform',  gen:(T,F,r)=>makeTone(T,F,r),           desc:'Continuous wave tone — single frequency, extremely narrow spectral line. Jammers and beacons appear like this.' },
+];
+
+// ── Render spectrograms ───────────────────────────────────────────────────────
+const T = 80, F = 128;  // time steps, frequency bins
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+function renderSgram(canvas, gen, seed) {
+  const W = canvas.offsetWidth || 300;
+  const H = canvas.offsetHeight || 160;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(DPR, DPR);
+
+  const r = rng(seed);
+  const data = gen(T, F, r);
+
+  const cellW = W / T, cellH = H / F;
+  for (let t = 0; t < T; t++) {
+    for (let f = 0; f < F; f++) {
+      const db = Math.max(-80, Math.min(0, data[t][F - 1 - f]));
+      const norm = (db + 80) / 80;
+      const [rv, gv, bv] = inferno(norm);
+      ctx.fillStyle = `rgb(${rv},${gv},${bv})`;
+      ctx.fillRect(t * cellW, f * cellH, cellW + 0.5, cellH + 0.5);
+    }
+  }
+}
+
+function buildGrid(catFilter) {
+  const grid = document.getElementById('sgramGrid');
+  grid.innerHTML = '';
+  SIGNALS.filter(s => catFilter === 'all' || s.cat === catFilter).forEach((sig, idx) => {
+    const card = document.createElement('div');
+    card.className = 'sgram-card';
+    card.dataset.cat = sig.cat;
+    card.innerHTML = `
+      <canvas class="sgram-canvas" data-seed="${idx * 37 + 13}"></canvas>
+      <div class="sgram-info">
+        <h4>${sig.name}</h4>
+        <div class="sgram-meta">${sig.meta}</div>
+        <p class="sgram-desc">${sig.desc}</p>
+      </div>`;
+    grid.appendChild(card);
+
+    const canvas = card.querySelector('canvas');
+    canvas.style.height = '160px';
+
+    // Initial render after layout
+    requestAnimationFrame(() => renderSgram(canvas, sig.gen, parseInt(canvas.dataset.seed)));
+
+    // Animate (re-render with time-advancing seed)
+    let frame = 0, animId = null, paused = false;
+    function animate() {
+      if (!paused) {
+        renderSgram(canvas, (T, F, r) => {
+          const base = sig.gen(T, F, r);
+          // Shift by frame to animate
+          return base.map((_, t) => base[(t + frame) % T]);
+        }, parseInt(canvas.dataset.seed) + frame);
+        frame = (frame + 1) % T;
+      }
+      animId = requestAnimationFrame(animate);
+    }
+    setTimeout(() => animate(), 500 + idx * 120);
+
+    card.addEventListener('mouseenter', () => { paused = true; });
+    card.addEventListener('mouseleave', () => { paused = false; });
+  });
+}
+
+buildGrid('all');
+
+document.querySelectorAll('#filterRow .filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#filterRow .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    buildGrid(btn.dataset.cat);
+  });
+});
+
+// Sidebar active tracking
+function setActive() {
+  const threshold = window.scrollY + 160;
+  let cur = null, mx = -Infinity;
+  document.querySelectorAll('#nav a[href^="#"]').forEach(a => {
+    const el = document.getElementById(a.getAttribute('href').slice(1));
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY;
+    if (top <= threshold && top > mx) { mx = top; cur = a; }
+  });
+  document.querySelectorAll('#nav a').forEach(a => a.classList.remove('active'));
+  if (cur) cur.classList.add('active');
+}
+window.addEventListener('scroll', setActive, {passive:true});
+window.addEventListener('load', setActive);
+</script>
+</body>
+</html>

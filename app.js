@@ -284,6 +284,116 @@ function initIqCanvas() {
   draw();
 }
 
+// ── Search ───────────────────────────────────────────────────────────────────
+function initSearch() {
+  const input = document.getElementById('navSearch');
+  if (!input) return;
+  const links = [...document.querySelectorAll('#nav a[href]')];
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    links.forEach(a => {
+      const match = !q || a.textContent.toLowerCase().includes(q);
+      a.style.display = match ? '' : 'none';
+    });
+    // Also hide separators that have no visible links after them
+    document.querySelectorAll('#nav .nav-sep').forEach(sep => {
+      let next = sep.nextElementSibling;
+      let hasVisible = false;
+      while (next && !next.classList.contains('nav-sep')) {
+        if (next.tagName === 'A' && next.style.display !== 'none') hasVisible = true;
+        next = next.nextElementSibling;
+      }
+      sep.style.display = hasVisible || !q ? '' : 'none';
+    });
+  });
+}
+
+// ── Theme toggle ─────────────────────────────────────────────────────────────
+function initTheme() {
+  const btn = document.getElementById('themeToggle');
+  if (!btn) return;
+  const saved = localStorage.getItem('theme');
+  if (saved === 'light') document.body.classList.add('light');
+  btn.addEventListener('click', () => {
+    const isLight = document.body.classList.toggle('light');
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  });
+}
+
+// ── Copy buttons on code blocks ───────────────────────────────────────────────
+function initCopyButtons() {
+  document.querySelectorAll('pre').forEach(pre => {
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.textContent = 'Copy';
+    btn.addEventListener('click', () => {
+      const code = pre.querySelector('code');
+      navigator.clipboard.writeText(code ? code.innerText : pre.innerText).then(() => {
+        btn.textContent = '✓ Copied';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+      });
+    });
+    pre.appendChild(btn);
+  });
+}
+
+// ── Live feed ─────────────────────────────────────────────────────────────────
+let liveInterval = null;
+window.toggleLive = function() {
+  const btn = document.getElementById('liveToggle');
+  const status = document.getElementById('liveStatus');
+  if (liveInterval) {
+    clearInterval(liveInterval);
+    liveInterval = null;
+    btn.textContent = 'Connect';
+    btn.style.background = 'var(--blue)';
+    status.textContent = '● Offline';
+    status.style.color = 'var(--muted)';
+    document.getElementById('liveTable').textContent = 'Disconnected.';
+    return;
+  }
+  btn.textContent = 'Disconnect';
+  btn.style.background = 'var(--red)';
+  fetchLive();
+  liveInterval = setInterval(fetchLive, 3000);
+};
+
+async function fetchLive() {
+  const url = document.getElementById('liveUrl').value.trim();
+  const status = document.getElementById('liveStatus');
+  const table = document.getElementById('liveTable');
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(2500) });
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    const signals = Array.isArray(data) ? data : (data.signals || []);
+    status.textContent = '● Live';
+    status.style.color = 'var(--green)';
+    if (!signals.length) { table.textContent = 'No recent signals.'; return; }
+    const rows = signals.slice(0, 15).map(s => {
+      const f = s.center_freq_hz ? (s.center_freq_hz/1e6).toFixed(4) : '—';
+      const m = s.modulation || s.hypothesis || '—';
+      const p = s.power_db ? s.power_db.toFixed(1) : '—';
+      const snr = s.snr_db ? s.snr_db.toFixed(1) : '—';
+      return `${f.padEnd(12)} ${m.padEnd(14)} ${p.padStart(7)} dB  SNR ${snr} dB`;
+    });
+    table.innerHTML = '<span style="color:var(--dim)">Freq (MHz)    Modulation     Power       SNR</span>\n' +
+      rows.map(r => `<span style="color:var(--tx)">${r}</span>`).join('\n');
+  } catch {
+    status.textContent = '● Offline';
+    status.style.color = 'var(--red)';
+    table.textContent = 'Cannot reach ' + document.getElementById('liveUrl').value;
+  }
+}
+
 window.addEventListener('scroll', setActive, { passive: true });
-window.addEventListener('load', () => { setActive(); animateBars(); initIqCanvas(); });
+window.addEventListener('load', () => {
+  setActive();
+  animateBars();
+  initIqCanvas();
+  initSearch();
+  initTheme();
+  initCopyButtons();
+});
 setActive();

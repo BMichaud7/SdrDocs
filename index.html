@@ -36,17 +36,32 @@
 
   <div class="nav-sep">Results</div>
   <a href="accuracy.html"><span class="nav-ic">📊</span> Accuracy Charts ↗</a>
+  <a href="spectrograms.html"><span class="nav-ic">🌊</span> Spectrograms ↗</a>
   <a href="#ml-acc"><span class="nav-ic">✦</span> ML Accuracy</a>
   <a href="#df-acc"><span class="nav-ic">◎</span> DF Accuracy</a>
   <a href="#stt-acc"><span class="nav-ic">◌</span> STT Performance</a>
+  <a href="#latency"><span class="nav-ic">⏱</span> Latency</a>
 
   <div class="nav-sep">Protocols</div>
   <a href="#p25"><span class="nav-ic">⊛</span> P25 Trunking</a>
+  <a href="#p25guide"><span class="nav-ic">↳</span> P25 Setup Guide</a>
   <a href="#protos"><span class="nav-ic">≡</span> All Protocols</a>
+
+  <div class="nav-sep">Deployment</div>
+  <a href="#resources"><span class="nav-ic">⬡</span> Resource Requirements</a>
+  <a href="#multisite"><span class="nav-ic">⊕</span> Multi-site DF</a>
+  <a href="#comparison"><span class="nav-ic">⇌</span> Comparison</a>
+  <a href="#roadmap"><span class="nav-ic">→</span> Roadmap</a>
+  <a href="#live"><span class="nav-ic">●</span> Live Feed</a>
 
   <div class="nav-sep">Library</div>
   <a href="#sdk"><span class="nav-ic">{ }</span> SdrSdk</a>
   <a href="#taskapi"><span class="nav-ic">⌗</span> SdrTaskApi</a>
+
+  <div class="nav-search">
+    <input type="text" id="navSearch" placeholder="Search…" autocomplete="off">
+  </div>
+  <button id="themeToggle" class="theme-btn" title="Toggle light/dark">◑</button>
 </nav>
 
 <!-- ══════════════════════════════════════ HEADER -->
@@ -1281,6 +1296,241 @@ double mhz = rf.center_freq_hz.in(au::mega(au::hertz));</code></pre>
 </tbody>
 </table>
 </div>
+</section>
+
+<!-- ══════════════════════════════════════ LATENCY -->
+<section id="latency">
+<h2>End-to-End Latency</h2>
+<p>Measured on an RTX 2060 SUPER with a HackRF One at 20 MSPS. Each stage adds to the pipeline latency from signal appearing in the air to classified/decoded output available in the database.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Stage</th><th>Latency</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Signal detection (sweep)</td><td>~100 ms</td><td>Per sweep dwell at 20 MSPS, 4096-point FFT. Full 920 MHz sweep = ~7.6 s.</td></tr>
+<tr><td>IQ snapshot embedded</td><td>0 ms</td><td>1024 CF32 samples included in RF_DETECTION — no re-acquisition for fast path.</td></tr>
+<tr><td>Classification — fast path</td><td>~5 ms</td><td>ONNX CUDA inference on snapshot IQ. Fires when confidence ≥ 0.75.</td></tr>
+<tr><td>Classification — slow path</td><td>~80 ms</td><td>65k-sample NARROWBAND capture + feature extraction + ONNX. Triggered on low confidence.</td></tr>
+<tr><td>Demodulation (analog)</td><td>50–200 ms</td><td>IQ capture duration (audio_duration_ms, default 5 s) + liquid-dsp processing.</td></tr>
+<tr><td>Demodulation (digital)</td><td>20–100 ms</td><td>IQ capture (digital_duration_ms, default 2 s) + protocol decode.</td></tr>
+<tr><td>Direction finding</td><td>~20 ms</td><td>MUSIC pseudospectrum sweep at 0.5° resolution once all antenna snapshots arrive.</td></tr>
+<tr><td>VAD gate</td><td>&lt;1 ms</td><td>RMS energy check — discards silence/noise before Whisper is called.</td></tr>
+<tr><td>Whisper transcription (base.en, CUDA)</td><td>~40 ms</td><td>For a 3 s audio clip. ~400 ms on CPU int8.</td></tr>
+<tr><td>PostgreSQL write</td><td>&lt;5 ms</td><td>Single INSERT per detection/classification/alert.</td></tr>
+</tbody>
+</table>
+</div>
+<div class="callout">
+<strong>Typical time from signal to classified DB row:</strong> ~100 ms (sweep dwell) + ~5 ms (ONNX) + &lt;5 ms (DB write) = <strong>~110 ms</strong> on the fast path. Demodulated audio to transcript adds another ~250 ms for a 3 s voice clip.
+</div>
+</section>
+
+<!-- ══════════════════════════════════════ P25 SETUP GUIDE -->
+<section id="p25guide">
+<h2>P25 System Setup Walkthrough</h2>
+<p>Step-by-step guide for monitoring a local P25 trunked system — finding the control channel, configuring the stack, and querying talk group activity.</p>
+
+<div class="steps">
+  <div class="step"><div class="sn">1</div><div class="sb">
+    <h3>Find your local P25 system</h3>
+    <p>The <a href="https://www.radioreference.com">RadioReference database</a> lists all licensed P25 systems with their control channel frequencies, WACN, and SYS_ID. Look up your county or city. Note the control channel frequency (typically 851–869 MHz for NPSPAC, 769–775/799–805 MHz for 700 MHz band).</p>
+  </div></div>
+  <div class="step"><div class="sn">2</div><div class="sb">
+    <h3>Verify reception with a spectrum sweep</h3>
+    <p>Run AcquisitionApp in scan-only mode and look for a 12.5 kHz flat-top signal near the listed control channel frequency. It will appear as a constant-energy block — unlike voice channels which are intermittent.</p>
+    <pre><code class="language-bash">./scan.sh --hw --no-analysis   # lightest mode, just detection</code></pre>
+    <pre><code class="language-sql">-- Find constant signals with ~12.5 kHz bandwidth
+SELECT freq_mhz, bw_khz, snr_db, hits FROM recent_signals
+WHERE bw_khz BETWEEN 10 AND 15 AND hits > 20
+ORDER BY hits DESC;</code></pre>
+  </div></div>
+  <div class="step"><div class="sn">3</div><div class="sb">
+    <h3>Configure demod.xml</h3>
+    <pre><code class="language-xml">&lt;p25&gt;
+  &lt;enabled&gt;true&lt;/enabled&gt;
+  &lt;control_freq_hz&gt;851012500&lt;/control_freq_hz&gt;  &lt;!-- your control channel --&gt;
+  &lt;sample_rate_hz&gt;48000&lt;/sample_rate_hz&gt;
+  &lt;capture_s&gt;3.0&lt;/capture_s&gt;
+  &lt;tg_whitelist&gt;&lt;/tg_whitelist&gt;  &lt;!-- empty = follow all --&gt;
+&lt;/p25&gt;</code></pre>
+  </div></div>
+  <div class="step"><div class="sn">4</div><div class="sb">
+    <h3>Configure scanner.xml</h3>
+    <pre><code class="language-xml">&lt;p25&gt;
+  &lt;enabled&gt;true&lt;/enabled&gt;
+  &lt;capture_s&gt;4.0&lt;/capture_s&gt;
+  &lt;rank&gt;3&lt;/rank&gt;  &lt;!-- preempts sweep --&gt;
+  &lt;tg_whitelist&gt;1001 2003&lt;/tg_whitelist&gt;  &lt;!-- or empty for all --&gt;
+&lt;/p25&gt;</code></pre>
+  </div></div>
+  <div class="step"><div class="sn">5</div><div class="sb">
+    <h3>Run the stack and monitor</h3>
+    <pre><code class="language-bash">./scan.sh --hw --demod</code></pre>
+    <pre><code class="language-sql">-- Watch channel grants arrive in real time
+SELECT role, freq_mhz, talk_group, encrypted, alg_name, grant_count, last_seen
+FROM p25_site_channels ORDER BY last_seen DESC;
+
+-- See encrypted vs clear traffic breakdown
+SELECT encrypted, alg_name, count(*) as grants
+FROM p25_channels GROUP BY encrypted, alg_name;</code></pre>
+  </div></div>
+</div>
+</section>
+
+<!-- ══════════════════════════════════════ RESOURCE REQUIREMENTS -->
+<section id="resources">
+<h2>Resource Requirements</h2>
+<p>Per-component requirements. All components can run on the same host or be distributed across a network — they communicate exclusively over AMQP. Minimum spec for the full pipeline: 8 cores, 16 GB RAM, RTX 3060 or better.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Component</th><th>CPU cores</th><th>RAM</th><th>GPU VRAM</th><th>Disk</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Apache Artemis (broker)</td><td>1–2</td><td>512 MB – 2 GB</td><td>—</td><td>~100 MB</td><td>Scale RAM with message volume. Default 512 MB heap works for light loads.</td></tr>
+<tr><td>PostgreSQL</td><td>1–2</td><td>256 MB – 2 GB</td><td>—</td><td>1–50 GB</td><td>Detection table grows ~1 MB/hour at active scan rate. Use BRIN indexes for time queries.</td></tr>
+<tr><td>SdrResourceManager</td><td>1–2</td><td>128–512 MB</td><td>—</td><td>—</td><td>Light process — mostly network I/O and SoapySDR calls. One thread per active SDR.</td></tr>
+<tr><td>AcquisitionApp</td><td>2–4</td><td>256–1024 MB</td><td>—</td><td>—</td><td>RAM scales with IQ buffer size (dwell_samples × sample_rate × 8 bytes per CF32).</td></tr>
+<tr><td>AnalysisApp</td><td>2–4</td><td>512 MB – 2 GB</td><td>50–200 MB</td><td>10–50 MB (model)</td><td>ONNX Runtime CUDA: model weights ~10–50 MB VRAM. Activations ~100 MB at batch 8.</td></tr>
+<tr><td>DemodApp</td><td>2–6</td><td>256–1024 MB</td><td>—</td><td>—</td><td>RAM scales with concurrent demodulations. P25 control decoder runs a dedicated thread.</td></tr>
+<tr><td>DfApp</td><td>2–4</td><td>256–512 MB</td><td>—</td><td>—</td><td>CPU-only. MUSIC eigendecomposition is O(M³) in antenna count — fast for M ≤ 8.</td></tr>
+<tr><td>SpeechApp (Whisper tiny.en)</td><td>2</td><td>512 MB</td><td>200 MB</td><td>75 MB</td><td>Edge / embedded deployment. English only.</td></tr>
+<tr><td>SpeechApp (Whisper base.en)</td><td>2–4</td><td>1 GB</td><td>400 MB</td><td>145 MB</td><td>Tested baseline — best accuracy/speed for English.</td></tr>
+<tr><td>SpeechApp (Whisper medium)</td><td>4</td><td>3 GB</td><td>2 GB</td><td>1.5 GB</td><td>Best practical accuracy. CUDA strongly recommended.</td></tr>
+<tr><td>SpeechApp (Whisper large-v3)</td><td>4–8</td><td>6 GB</td><td>6 GB</td><td>3.1 GB</td><td>Maximum accuracy. GPU with ≥8 GB VRAM required.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>Minimum viable hardware</h4>
+<div class="feat-grid">
+  <div class="feat"><strong>Detect only</strong><p>Raspberry Pi 4 (4 GB) + RTL-SDR v3. Resource Manager + AcquisitionApp. ~2 cores, ~1 GB RAM, no GPU. Detections only — no ML, no demod.</p></div>
+  <div class="feat"><strong>Classify + detect</strong><p>Intel NUC or mini-PC (8 GB RAM, 4 cores) + HackRF or RTL-SDR. Add AnalysisApp with CPU ONNX (slow path ~500 ms, fast path ~30 ms on CPU int8).</p></div>
+  <div class="feat"><strong>Full pipeline (GPU)</strong><p>Desktop with RTX 3060 (12 GB VRAM) + 16 GB RAM + HackRF/USRP. All components including SpeechApp (Whisper medium). Full pipeline latency ~200 ms.</p></div>
+  <div class="feat"><strong>Multi-site DF</strong><p>2× USRP B210 (coherent dual-channel each) + 16 GB RAM + shared LO reference. 4-element direction finding to &lt;2° RMS. GPU optional but recommended for AnalysisApp.</p></div>
+</div>
+</section>
+
+<!-- ══════════════════════════════════════ MULTI-SITE DF -->
+<section id="multisite">
+<h2>Multi-Site Direction Finding</h2>
+<p>Direction finding requires phase-coherent IQ from multiple antenna elements. The MUSIC algorithm measures phase differences between antennas to compute bearing — this only works if all receivers share the same oscillator reference.</p>
+
+<h4>Hardware options for coherent reception</h4>
+<div class="feat-grid">
+  <div class="feat"><strong>USRP B210 (built-in coherence)</strong><p>Dual RX on a single board. Both channels are inherently phase-coherent — no external reference needed. Best for 2-element arrays. Multiple B210s require GPS-DO or shared reference.</p></div>
+  <div class="feat"><strong>LimeSDR / BladeRF (dual-RX)</strong><p>Same as B210 — dual coherent RX per board. LimeSDR Mini 2.0 supports 2 channels. Multiple boards require external reference.</p></div>
+  <div class="feat"><strong>GPS-Disciplined Oscillator (GPSDO)</strong><p>Best absolute accuracy. Each USRP or HackRF locked to a shared GPS 10 MHz reference via SMA splitter. Required for multi-host DF where receivers are separated by more than a cable run.</p></div>
+  <div class="feat"><strong>Hardwired LO reference</strong><p>Single oscillator → coax splitter → all receivers. Works for collocated arrays (&lt;10 m separation). Low cost — any stable 10 MHz source works.</p></div>
+</div>
+
+<h4>Array configuration</h4>
+<pre><code class="language-xml">&lt;!-- devices-direct.xml — 2× USRP B210 as a 4-element coherent array --&gt;
+&lt;device&gt;
+  &lt;id&gt;usrp-0&lt;/id&gt;
+  &lt;driver&gt;uhd,type=b200,serial=ABC123&lt;/driver&gt;
+  &lt;coherency_group&gt;df-array-0&lt;/coherency_group&gt;  &lt;!-- must match on all devices --&gt;
+  &lt;caps&gt;&lt;rx_channels&gt;2&lt;/rx_channels&gt;&lt;/caps&gt;      &lt;!-- 2 coherent RX per B210 --&gt;
+&lt;/device&gt;
+&lt;device&gt;
+  &lt;id&gt;usrp-1&lt;/id&gt;
+  &lt;driver&gt;uhd,type=b200,serial=DEF456&lt;/driver&gt;
+  &lt;coherency_group&gt;df-array-0&lt;/coherency_group&gt;
+  &lt;caps&gt;&lt;rx_channels&gt;2&lt;/rx_channels&gt;&lt;/caps&gt;
+&lt;/device&gt;</code></pre>
+
+<h4>Antenna geometry</h4>
+<p>DfApp supports <strong>Uniform Circular Array (UCA)</strong>. Optimal element spacing is λ/2 at the target frequency. For VHF (144 MHz), λ = 2.08 m → element spacing 1.04 m. For UHF (433 MHz), λ = 0.69 m → spacing 0.35 m. More elements improve accuracy but require more coherent channels.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Elements</th><th>Min SDRs needed</th><th>Accuracy (SNR 25 dB)</th><th>Left/right ambiguity</th></tr></thead>
+<tbody>
+<tr><td>2</td><td>1× dual-RX (B210)</td><td>&lt;5°</td><td>Yes — cannot distinguish left from right</td></tr>
+<tr><td>3</td><td>2× single-RX or 1× dual + 1× single</td><td>&lt;3.5°</td><td>No</td></tr>
+<tr><td>4</td><td>2× dual-RX</td><td>&lt;2.5°</td><td>No</td></tr>
+<tr><td>5</td><td>2× dual-RX + 1× single</td><td>&lt;2°</td><td>No</td></tr>
+<tr><td>8</td><td>4× dual-RX</td><td>&lt;1°</td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<!-- ══════════════════════════════════════ COMPARISON -->
+<section id="comparison">
+<h2>Comparison with Alternatives</h2>
+<p>Honest comparison — each tool has a different focus. Open RF Stack is the only option combining automated ML classification, P25 control decode, multi-protocol demodulation, direction finding, and voice transcription in a single containerised pipeline.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Feature</th><th>Open RF Stack</th><th>OpenWebRX</th><th>GNU Radio</th><th>SDRTrunk</th><th>rtl_433</th></tr></thead>
+<tbody>
+<tr><td>Automated ML classification (47 classes)</td><td class="rv g">✓ ONNX, 5 ms</td><td class="rv r">✗</td><td class="rv r">✗ (bring your own)</td><td class="rv r">✗</td><td class="rv r">✗</td></tr>
+<tr><td>P25 control channel decode</td><td class="rv g">✓ TSBK, TG filter, voice follow</td><td class="rv r">✗</td><td class="rv r">Partial (gr-p25)</td><td class="rv g">✓ Full trunking</td><td class="rv r">✗</td></tr>
+<tr><td>Encryption detection (ALGID/KID)</td><td class="rv g">✓ 7 algorithms</td><td class="rv r">✗</td><td class="rv r">✗</td><td class="rv o">Partial</td><td class="rv r">✗</td></tr>
+<tr><td>Direction finding (MUSIC)</td><td class="rv g">✓ &lt;2° RMS</td><td class="rv r">✗</td><td class="rv r">✗ (bring your own)</td><td class="rv r">✗</td><td class="rv r">✗</td></tr>
+<tr><td>Voice transcription (Whisper)</td><td class="rv g">✓ C++ native</td><td class="rv r">✗</td><td class="rv r">✗</td><td class="rv r">✗</td><td class="rv r">✗</td></tr>
+<tr><td>RF threat detection</td><td class="rv g">✓ GPS, ADS-B, AIS, EAS, DSC, P25</td><td class="rv r">✗</td><td class="rv r">✗</td><td class="rv r">✗</td><td class="rv r">✗</td></tr>
+<tr><td>PostgreSQL persistence</td><td class="rv g">✓ All detections + P25 + alerts</td><td class="rv r">✗</td><td class="rv r">✗</td><td class="rv o">SQLite</td><td class="rv r">✗</td></tr>
+<tr><td>Browser waterfall / spectrum display</td><td class="rv r">SdrScanner (Qt, not browser)</td><td class="rv g">✓ WebSDR-style</td><td class="rv r">QT GUI only</td><td class="rv o">Basic UI</td><td class="rv r">✗</td></tr>
+<tr><td>Protocol support breadth</td><td class="rv o">25+ (focused set)</td><td class="rv o">~15 common</td><td class="rv g">Hundreds (community)</td><td class="rv o">P25/DMR/NXDN/M17</td><td class="rv g">250+ IoT sensors</td></tr>
+<tr><td>SoapySDR hardware support</td><td class="rv g">✓ All SoapySDR devices</td><td class="rv g">✓</td><td class="rv g">✓</td><td class="rv o">RTL-SDR, some others</td><td class="rv o">RTL-SDR, some others</td></tr>
+<tr><td>Multi-SDR / distributed</td><td class="rv g">✓ AMQP bus, any topology</td><td class="rv o">Multi-input</td><td class="rv o">Limited</td><td class="rv r">Single host</td><td class="rv r">Single host</td></tr>
+<tr><td>Containerised / Kubernetes</td><td class="rv g">✓ Podman + k8s manifests</td><td class="rv g">✓ Docker</td><td class="rv r">Manual</td><td class="rv r">Manual</td><td class="rv r">Manual</td></tr>
+<tr><td>Language</td><td>C++20</td><td>Python/JS</td><td>C++/Python</td><td>Java</td><td>C</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="callout green">
+<strong>Best choice for:</strong> automated signal intelligence pipelines — unattended spectrum monitoring, P25 trunked system logging, multi-antenna bearing, voice transcription, and RF threat alerting.
+</div>
+<div class="callout orange">
+<strong>Use OpenWebRX instead when:</strong> you want a browser-accessible multi-user web SDR receiver with real-time waterfall display.<br>
+<strong>Use GNU Radio instead when:</strong> you need a visual flowgraph environment, exotic DSP research, or access to the full gr-* ecosystem of community blocks.<br>
+<strong>Use SDRTrunk instead when:</strong> you specifically need P25/DMR trunking with a rich GUI and don't need ML or DF.<br>
+<strong>Use rtl_433 instead when:</strong> your primary interest is ISM-band IoT sensor decoding (weather stations, tire sensors, smart meters).
+</div>
+</section>
+
+<!-- ══════════════════════════════════════ ROADMAP -->
+<section id="roadmap">
+<h2>Roadmap</h2>
+<div class="feat-grid">
+  <div class="feat"><strong>v2 47-class model (in training)</strong><p>256 channels, 12 residual blocks, 1024-sample input window, 2.1M training samples. Targeting 79–84% val_acc vs current 74.8%. Expected: +5–9pp overall.</p></div>
+  <div class="feat"><strong>GPS signal correlation</strong><p>PRN code correlator for GPS L1 C/A at 1575.42 MHz — detect individual satellites, measure C/N₀. Foundation for spoofing discrimination beyond power-level detection.</p></div>
+  <div class="feat"><strong>ADS-B position mapping</strong><p>Parse lat/lon from DF17 CPR encoded position messages. Build a live aircraft map from decoded ADS-B frames, correlating ICAO addresses with callsigns.</p></div>
+  <div class="feat"><strong>WebRTC live audio</strong><p>Stream demodulated FM/P25 audio to a browser via WebRTC. Low-latency (~50 ms) voice monitoring without needing a local SDR client.</p></div>
+  <div class="feat"><strong>REST API</strong><p>HTTP REST endpoint exposing recent detections, classifications, P25 grants, and alerts. Enables dashboard integrations and third-party tooling without AMQP.</p></div>
+  <div class="feat"><strong>TETRA voice decode</strong><p>ACELP codec (not AMBE) — open-source decoding possible. European public safety voice would become intelligible beyond raw dibit output.</p></div>
+  <div class="feat"><strong>Kubernetes autoscaling</strong><p>HPA policies for AnalysisApp and DemodApp based on AMQP queue depth. Automatically scale GPU pods when detection rate increases.</p></div>
+  <div class="feat"><strong>Web dashboard</strong><p>Browser-based live view of signals, P25 channels, transcripts, and alerts. Chart.js spectrum history, live signal table, bearing compass display.</p></div>
+</div>
+</section>
+
+<!-- ══════════════════════════════════════ LIVE FEED -->
+<section id="live">
+<h2>Live Signal Feed</h2>
+<p>When the stack is running, enter the host address to see live detections. The REST API requires SdrWebBridge running on the stack host. Defaults to <code>localhost:8080</code> — change if your stack is on another machine.</p>
+
+<div class="chart-card" style="background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);padding:1.2rem">
+  <div style="display:flex;gap:.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap">
+    <input type="text" id="liveUrl" value="http://localhost:8080/api/signals"
+      style="flex:1;min-width:220px;background:var(--bg3);border:1px solid var(--bd2);border-radius:6px;padding:.4rem .75rem;color:var(--tx);font-family:'JetBrains Mono',monospace;font-size:.82rem">
+    <button id="liveToggle" onclick="toggleLive()"
+      style="padding:.4rem 1rem;background:var(--blue);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.83rem;font-weight:600">Connect</button>
+    <span id="liveStatus" style="font-size:.78rem;color:var(--muted)">● Offline</span>
+  </div>
+  <div id="liveTable" style="font-size:.82rem;color:var(--muted);font-family:'JetBrains Mono',monospace">
+    Not connected. Start the stack and click Connect, or point to your stack's IP.
+  </div>
+</div>
+
+<h4>Setting up the REST endpoint</h4>
+<p>SdrWebBridge (C++ service) subscribes to <code>rf.detections</code> and <code>rf.analysis</code> and serves a simple HTTP API. Add it to your stack:</p>
+<pre><code class="language-bash">./scan.sh --hw --demod --webbridge   # start with REST API enabled
+
+# API endpoints:
+# GET http://host:8080/api/signals   — last 50 detected signals
+# GET http://host:8080/api/status    — uptime, detection counts</code></pre>
 </section>
 
 </main>

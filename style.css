@@ -412,6 +412,58 @@ footer a { color: var(--blue) }
   margin-top: -.4rem; padding: 0 1%;
 }
 
+/* ── Nav search ── */
+.nav-search {
+  padding: .75rem 1rem .25rem;
+  border-top: 1px solid var(--bd);
+  margin-top: auto;
+}
+.nav-search input {
+  width: 100%; padding: .35rem .65rem;
+  background: var(--bg3); border: 1px solid var(--bd2);
+  border-radius: 6px; color: var(--tx);
+  font-size: .78rem; font-family: 'Inter', sans-serif;
+}
+.nav-search input::placeholder { color: var(--dim) }
+.nav-search input:focus { outline: none; border-color: var(--blue) }
+
+/* ── Theme toggle ── */
+.theme-btn {
+  display: block; width: calc(100% - 2rem); margin: .4rem 1rem .5rem;
+  padding: .35rem; background: var(--bg3); border: 1px solid var(--bd2);
+  border-radius: 6px; color: var(--muted); cursor: pointer;
+  font-size: .85rem; transition: all .12s;
+}
+.theme-btn:hover { border-color: var(--blue); color: var(--blue) }
+
+/* ── Light mode ── */
+body.light {
+  --bg: #f6f8fa; --bg2: #ffffff; --bg3: #f1f3f5; --bg4: #e8eaed;
+  --bd: #d0d7de; --bd2: #c7cdd4; --tx: #1f2328; --muted: #57606a;
+  --dim: #8c959f; --blue: #0969da; --green: #1a7f37; --orange: #9a6700;
+  --red: #d1242f; --purple: #8250df;
+}
+body.light header { background: linear-gradient(135deg, #e8f0fe 0%, #f6f8fa 60%) }
+body.light pre code { background: #f6f8fa !important }
+body.light .chart-card,body.light .arch-diagram,body.light .results { background: #fff }
+
+/* ── Copy buttons ── */
+pre { position: relative }
+.copy-btn {
+  position: absolute; top: .4rem; right: .4rem;
+  padding: .2rem .55rem; font-size: .72rem; font-weight: 600;
+  background: var(--bg3); border: 1px solid var(--bd2);
+  border-radius: 4px; color: var(--muted); cursor: pointer;
+  opacity: 0; transition: opacity .15s, color .15s;
+}
+pre:hover .copy-btn { opacity: 1 }
+.copy-btn.copied { color: var(--green); border-color: var(--green) }
+
+/* ── Comparison table cell colours ── */
+.rv.g { color: var(--green) !important }
+.rv.r { color: var(--red) !important }
+.rv.o { color: var(--orange) !important }
+
 /* ── Responsive ── */
 @media (max-width: 900px) {
   header, main, footer { margin-left: 0; padding: 1.5rem }
