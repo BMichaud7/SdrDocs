@@ -31,19 +31,7 @@ jobs:
 
           echo "Deployed to https://bmichaud.com/Sdr/"
 
-      - name: Update root index from pages.json
-        env:
-          DEPLOY_KEY: ${{ secrets.DOCS_DEPLOY_KEY }}
+      - name: List deployed pages
         run: |
-          # The root index.html fetches /Sdr/pages.json at load time.
-          # pages.json was just deployed above — nothing else to do for the root.
-          # This step exists as a reminder: to add a new page, update pages.json.
-          echo "pages.json deployed — bmichaud.com/ will reflect changes on next load."
-          echo "Pages in directory:"
-          python3 -c "
-import json
-with open('pages.json') as f:
-    pages = json.load(f)
-for p in pages:
-    print(f'  {p[\"icon\"]} {p[\"title\"]} → {p[\"url\"]}')
-"
+          echo "pages.json deployed — bmichaud.com/ updates on next load."
+          python3 -c 'import json; [print("  "+p["title"]+" -> "+p["url"]) for p in json.load(open("pages.json"))]'
