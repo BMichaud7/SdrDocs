@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>ML Accuracy Charts — Open RF Stack</title>
+<meta name="description" content="Interactive accuracy charts for the 47-class AMR model: per-SNR, per-class, and class vs SNR breakdown.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+.charts-wrap { display: flex; flex-direction: column; gap: 2.5rem; margin-top: 1.5rem }
+.chart-card {
+  background: var(--bg2); border: 1px solid var(--bd);
+  border-radius: var(--r); padding: 1.5rem;
+}
+.chart-card h3 { color: #fff; font-size: 1rem; margin-bottom: .25rem }
+.chart-card p { color: var(--muted); font-size: .82rem; margin-bottom: 1rem }
+.chart-container { position: relative }
+.filter-row { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1rem }
+.filter-btn {
+  padding: .2rem .65rem; border-radius: 2rem; font-size: .75rem; font-weight: 600;
+  border: 1px solid var(--bd2); background: var(--bg3); color: var(--muted);
+  cursor: pointer; transition: all .12s;
+}
+.filter-btn.active { background: rgba(79,158,255,.15); border-color: var(--blue); color: var(--blue) }
+.filter-btn:hover { border-color: var(--blue); color: var(--blue) }
+.stat-pills { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.2rem }
+.pill { background: var(--bg3); border: 1px solid var(--bd2); border-radius: var(--r); padding: .6rem 1rem }
+.pill-n { font-size: 1.5rem; font-weight: 700; color: #fff }
+.pill-l { font-size: .75rem; color: var(--muted); margin-top: .1rem }
+.note { color: var(--muted); font-size: .8rem; font-style: italic; margin-top: .5rem }
+.back-link { display: inline-flex; align-items: center; gap: .4rem; color: var(--blue); font-size: .85rem; margin-bottom: 1.5rem; text-decoration: none }
+.back-link:hover { text-decoration: underline }
+</style>
+</head>
+<body>
+
+<nav id="nav" style="padding-top:.75rem">
+  <a class="nav-logo" href="index.html"><span>📡</span> Open RF Stack</a>
+  <div class="nav-sep">Charts</div>
+  <a href="#snr-overall"><span class="nav-ic">📈</span> Accuracy vs SNR</a>
+  <a href="#class-acc"><span class="nav-ic">▦</span> Per-class accuracy</a>
+  <a href="#class-snr"><span class="nav-ic">⊞</span> Class vs SNR</a>
+  <a href="#hard-classes"><span class="nav-ic">⚠</span> Hard classes</a>
+  <div class="nav-sep">Pages</div>
+  <a href="index.html"><span class="nav-ic">←</span> Documentation</a>
+</nav>
+
+<header>
+  <div class="hdr">
+    <div class="hdr-top">
+      <div class="logo-wrap">📊</div>
+      <div>
+        <h1>ML Accuracy Charts</h1>
+        <p>47-class RadioResNet — measured on held-out test data at 9 SNR levels (−10 to +30 dB). Interactive: hover for values, click legend to toggle classes.</p>
+      </div>
+    </div>
+    <div class="stat-pills">
+      <div class="pill"><div class="pill-n">47</div><div class="pill-l">Signal classes</div></div>
+      <div class="pill"><div class="pill-n">74.8%</div><div class="pill-l">Overall val_acc</div></div>
+      <div class="pill"><div class="pill-n">85.2%</div><div class="pill-l">Accuracy at SNR ≥ 30 dB</div></div>
+      <div class="pill"><div class="pill-n">2.6%</div><div class="pill-l">Accuracy at SNR −10 dB</div></div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ── Overall accuracy vs SNR ── -->
+<section id="snr-overall">
+<h2>Overall Accuracy vs SNR</h2>
+<p>Mean per-class accuracy across all 47 signal classes at each SNR level. The model reaches 77% accuracy at SNR = 10 dB and saturates near 85% above 15 dB. Below 0 dB the problem becomes very hard — constellation structure collapses into noise.</p>
+<div class="chart-card">
+  <h3>All-class mean accuracy vs SNR</h3>
+  <p>Evaluated on 5% held-out test split (~105k samples)</p>
+  <div class="chart-container" style="height:280px">
+    <canvas id="chartSnrOverall"></canvas>
+  </div>
+</div>
+</section>
+
+<!-- ── Per-class accuracy ── -->
+<section id="class-acc">
+<h2>Per-Class Accuracy (all SNRs mixed)</h2>
+<p>Accuracy for each of the 47 signal classes, averaged over all SNR levels from −10 to +30 dB. ADS-B and DTMF score highest due to their distinctive spectral signatures. QAM64, PSK31, P25 Phase 2 and NAVTEX are the hardest — primarily due to overlap with neighbouring classes at low SNR.</p>
+
+<div class="chart-card">
+  <div class="filter-row" id="classFilterRow">
+    <button class="filter-btn active" data-group="all">All</button>
+    <button class="filter-btn" data-group="analog">Analog voice</button>
+    <button class="filter-btn" data-group="digital">Digital modulation</button>
+    <button class="filter-btn" data-group="protocol">Protocol</button>
+    <button class="filter-btn" data-group="qam">QAM family</button>
+  </div>
+  <div class="chart-container" style="height:480px">
+    <canvas id="chartClassAcc"></canvas>
+  </div>
+  <p class="note">Values measured at mixed SNR (−10 to +30 dB). High-SNR-only would be ~15pp higher for most classes.</p>
+</div>
+</section>
+
+<!-- ── Key classes vs SNR ── -->
+<section id="class-snr">
+<h2>Selected Classes: Accuracy vs SNR</h2>
+<p>How accuracy changes with SNR for key signal types. Click the legend to show/hide individual classes. Most classes have a sharp transition — near-zero accuracy below their "threshold SNR" then rapid rise to near-perfect above it.</p>
+
+<div class="chart-card">
+  <div class="filter-row" id="classSnrFilterRow">
+    <button class="filter-btn active" data-snrgroup="core">Core modulations</button>
+    <button class="filter-btn" data-snrgroup="proto">Protocols</button>
+    <button class="filter-btn" data-snrgroup="qam">QAM family</button>
+    <button class="filter-btn" data-snrgroup="all">All shown</button>
+  </div>
+  <div class="chart-container" style="height:340px">
+    <canvas id="chartClassSnr"></canvas>
+  </div>
+</div>
+</section>
+
+<!-- ── Hard classes ── -->
+<section id="hard-classes">
+<h2>Hard Classes Analysis</h2>
+<p>Classes with accuracy below 20% need targeted improvement in v2 training. The common root causes are constellation overlap (QAM family), insufficient training examples (new protocol classes), and ambiguous spectral shape at the symbol rates used.</p>
+
+<div class="chart-card">
+  <h3>Classes with accuracy &lt; 50%</h3>
+  <p>Sorted by accuracy ascending — these benefit most from v2 improvements (1024-sample input, 4× QAM boost, 2× dataset)</p>
+  <div class="chart-container" style="height:260px">
+    <canvas id="chartHard"></canvas>
+  </div>
+</div>
+
+<div class="results" style="margin-top:1.2rem">
+  <div class="rrow"><span class="rl">QAM64 — 6.6%</span><span class="rv r">Worst class. Constellation is between QAM32 and QAM256 — the model confuses it with both at low SNR. V2 training adds 4× oversampling and 1024-sample context (sees more full symbols).</span></div>
+  <div class="rrow"><span class="rl">PSK31 — 0.0%</span><span class="rv r">31.25 baud — at 512 samples only ~16 symbols captured (not enough for Varicode pattern). 1024 samples doubles to ~32 symbols → should improve significantly.</span></div>
+  <div class="rrow"><span class="rl">P25_PHASE2 — 0.0%</span><span class="rv r">π/4-DQPSK — confused with QPSK at low SNR. Likely needs symbol-rate-aware features or more training examples in the new protocol-class data.</span></div>
+  <div class="rrow"><span class="rl">NAVTEX — 12.2%</span><span class="rv r">100 baud FSK — very slow, only a few symbol transitions visible in 512 samples. 1024 samples should help significantly.</span></div>
+  <div class="rrow"><span class="rl">RTTY — 13.7%</span><span class="rv r">45.45 baud — similar issue to NAVTEX (very slow baud rate). More samples per window = clearer tone switching pattern.</span></div>
+  <div class="rrow"><span class="rl">16PSK — 11.0%</span><span class="rv r">16-point PSK constellation is very close to QAM16 in feature space. A deeper/wider model (256 channels) should better resolve the boundary.</span></div>
+</div>
+</section>
+
+</main>
+
+<footer>
+  <span>Open RF Stack · <a href="https://github.com/BMichaud7">github.com/BMichaud7</a> · Model: amr_cnn_47class.onnx · Evaluated on held-out test split</span>
+  <div class="footer-links">
+    <a href="index.html">Documentation</a>
+    <a href="index.html#ml-acc">ML Accuracy Section</a>
+  </div>
+</footer>
+
+<script>
+'use strict';
+
+// ── Real measured data from evaluate.py ──────────────────────────────────────
+const DATA = {
+  snr_levels: [-10,-5,0,5,10,15,20,25,30],
+  snr_acc: {"−10":2.6,"−5":6.5,"0":31.6,"5":60.8,"10":77.1,"15":83.6,"20":84.2,"25":84.2,"30":85.2},
+  class_acc: {
+    "16ASK":68.1,"16PSK":11.0,"32PSK":40.2,"4ASK":73.2,"4FSK":63.4,"8FSK":54.3,
+    "8PSK":54.6,"ACARS":71.3,"ADS_B":92.8,"AIS":66.4,"AM_DSB":65.4,"AM_DSB_SC":75.2,
+    "AM_SSB_LSB":76.2,"AM_SSB_USB":71.4,"BPSK":54.1,"CSS":78.4,"DMR":53.3,"DSC":58.8,
+    "DSTAR":77.0,"DTMF":87.3,"EAS_SAME":76.2,"FLEX":68.6,"FM_NB":62.6,"FM_WB":72.4,
+    "FSK":69.5,"GFSK":69.5,"GMSK":66.9,"LFM":69.9,"MDC_1200":66.3,"MSK":68.8,
+    "NAVTEX":12.2,"NXDN":76.2,"OFDM":55.7,"OOK":61.8,"P25_C4FM":46.8,"P25_PHASE2":0.0,
+    "POCSAG":66.7,"PSK31":0.0,"QAM16":40.6,"QAM256":72.9,"QAM32":33.1,"QAM64":6.6,
+    "QPSK":57.0,"RTTY":13.7,"TETRA":41.4,"TONE":74.4,"VDL2":60.7
+  },
+  class_snr: {
+    "BPSK":     {"-10":0.0,"-5":0.0,"0":0.0,"5":0.0,"10":99.1,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
+    "QPSK":     {"-10":0.0,"-5":0.0,"0":0.0,"5":3.1,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
+    "8PSK":     {"-10":0.0,"-5":0.0,"0":0.0,"5":0.0,"10":74.1,"15":98.2,"20":100.0,"25":100.0,"30":100.0},
+    "QAM16":    {"-10":0.0,"-5":0.0,"0":0.0,"5":0.0,"10":20.3,"15":76.5,"20":85.6,"25":84.9,"30":89.6},
+    "QAM64":    {"-10":0.0,"-5":39.6,"0":0.0,"5":0.0,"10":1.4,"15":3.3,"20":3.8,"25":8.8,"30":8.6},
+    "QAM256":   {"-10":0.0,"-5":2.4,"0":98.3,"5":100.0,"10":95.6,"15":91.7,"20":89.6,"25":87.8,"30":91.7},
+    "FM_WB":    {"-10":0.0,"-5":0.0,"0":53.8,"5":95.4,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
+    "FM_NB":    {"-10":0.0,"-5":0.0,"0":0.8,"5":82.0,"10":98.4,"15":97.2,"20":99.3,"25":100.0,"30":100.0},
+    "P25_C4FM": {"-10":0.0,"-5":0.0,"0":58.6,"5":45.5,"10":58.5,"15":60.8,"20":63.6,"25":63.8,"30":68.0},
+    "AIS":      {"-10":0.0,"-5":0.8,"0":3.8,"5":94.8,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":99.2},
+    "ADS_B":    {"-10":41.7,"-5":100.0,"0":100.0,"5":100.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
+    "OFDM":     {"-10":0.0,"-5":0.0,"0":0.0,"5":14.4,"10":92.0,"15":98.4,"20":97.6,"25":97.7,"30":97.7},
+    "4FSK":     {"-10":0.0,"-5":0.0,"0":0.0,"5":78.4,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
+    "GMSK":     {"-10":0.0,"-5":0.0,"0":0.8,"5":93.7,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
+    "DMR":      {"-10":0.0,"-5":0.0,"0":31.5,"5":67.6,"10":72.6,"15":70.1,"20":82.0,"25":75.2,"30":77.5},
+    "POCSAG":   {"-10":0.0,"-5":0.8,"0":8.3,"5":99.2,"10":100.0,"15":100.0,"20":100.0,"25":99.2,"30":97.8},
+    "CSS":      {"-10":0.0,"-5":0.0,"0":10.0,"5":80.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
+    "LFM":      {"-10":0.0,"-5":0.0,"0":15.0,"5":85.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0}
+  }
+};
+
+const PALETTE = [
+  '#4f9eff','#3fb950','#d29922','#f85149','#bc8cff','#39d5b3',
+  '#ff7f50','#87ceeb','#90ee90','#ffb6c1','#dda0dd','#f0e68c',
+  '#20b2aa','#ff8c00','#4169e1','#32cd32','#dc143c','#ff1493'
+];
+
+const chartDefaults = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { labels: { color: '#768390', font: { family: 'Inter', size: 11 }, boxWidth: 12 } },
+    tooltip: { backgroundColor: '#161b22', borderColor: '#272d35', borderWidth: 1,
+                titleColor: '#cdd9e5', bodyColor: '#768390',
+                callbacks: { label: ctx => ` ${ctx.dataset.label || ctx.label}: ${ctx.parsed.y ?? ctx.parsed}%` } }
+  },
+  scales: {
+    x: { ticks: { color: '#768390', font: { size: 11 } }, grid: { color: '#1c2128' } },
+    y: { min: 0, max: 100, ticks: { color: '#768390', font: { size: 11 },
+         callback: v => v + '%' }, grid: { color: '#1c2128' } }
+  }
+};
+
+// ── Chart 1: SNR vs overall accuracy ─────────────────────────────────────────
+new Chart(document.getElementById('chartSnrOverall'), {
+  type: 'line',
+  data: {
+    labels: ['-10','-5','0','5','10','15','20','25','30'],
+    datasets: [{
+      label: 'Mean accuracy',
+      data: [2.6,6.5,31.6,60.8,77.1,83.6,84.2,84.2,85.2],
+      borderColor: '#4f9eff', backgroundColor: 'rgba(79,158,255,0.1)',
+      fill: true, tension: 0.35, pointRadius: 5, pointHoverRadius: 7,
+      pointBackgroundColor: '#4f9eff'
+    }]
+  },
+  options: { ...chartDefaults,
+    plugins: { ...chartDefaults.plugins,
+      annotation: { annotations: {
+        snr0: { type:'line', xMin:'0', xMax:'0', borderColor:'rgba(248,81,73,0.4)', borderWidth:1, borderDash:[4,4],
+                label:{content:'SNR 0 dB',display:true,color:'#f85149',font:{size:10}} }
+      }}
+    },
+    scales: { ...chartDefaults.scales,
+      x: { ...chartDefaults.scales.x, title: { display:true, text:'SNR (dB)', color:'#768390' } },
+      y: { ...chartDefaults.scales.y, title: { display:true, text:'Accuracy (%)', color:'#768390' } }
+    }
+  }
+});
+
+// ── Chart 2: Per-class accuracy bar chart ────────────────────────────────────
+const groups = {
+  all: Object.keys(DATA.class_acc),
+  analog: ['FM_WB','FM_NB','AM_DSB','AM_DSB_SC','AM_SSB_USB','AM_SSB_LSB'],
+  digital: ['BPSK','QPSK','8PSK','16PSK','32PSK','4ASK','16ASK','FSK','4FSK','8FSK','MSK','GFSK','GMSK','OOK','OFDM','CSS','LFM','TONE'],
+  protocol: ['P25_C4FM','P25_PHASE2','DMR','NXDN','DSTAR','TETRA','AIS','POCSAG','ACARS','FLEX','MDC_1200','DTMF','EAS_SAME','DSC','NAVTEX','RTTY','PSK31','ADS_B','VDL2'],
+  qam: ['QAM16','QAM32','QAM64','QAM256','QPSK','8PSK','16PSK','32PSK']
+};
+
+function buildClassChart(groupKey) {
+  const names = groups[groupKey].filter(n => DATA.class_acc[n] !== undefined);
+  names.sort((a,b) => DATA.class_acc[b] - DATA.class_acc[a]);
+  const vals = names.map(n => DATA.class_acc[n]);
+  const colors = vals.map(v => v >= 70 ? '#3fb950' : v >= 40 ? '#d29922' : '#f85149');
+  return { names, vals, colors };
+}
+
+let classChart = null;
+function renderClassChart(groupKey) {
+  const { names, vals, colors } = buildClassChart(groupKey);
+  if (classChart) classChart.destroy();
+  classChart = new Chart(document.getElementById('chartClassAcc'), {
+    type: 'bar',
+    data: {
+      labels: names,
+      datasets: [{ label: 'Accuracy', data: vals, backgroundColor: colors, borderRadius: 3 }]
+    },
+    options: { ...chartDefaults, indexAxis: 'y',
+      plugins: { ...chartDefaults.plugins,
+        tooltip: { ...chartDefaults.plugins.tooltip,
+          callbacks: { label: ctx => ` ${ctx.parsed.x}%` }
+        }
+      },
+      scales: {
+        x: { ...chartDefaults.scales.x, min:0, max:100, title:{display:true,text:'Accuracy (%)',color:'#768390'} },
+        y: { ticks: { color:'#cdd9e5', font:{size:10.5} }, grid:{color:'#1c2128'} }
+      }
+    }
+  });
+}
+renderClassChart('all');
+
+document.querySelectorAll('#classFilterRow .filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#classFilterRow .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderClassChart(btn.dataset.group);
+  });
+});
+
+// ── Chart 3: Class vs SNR line chart ─────────────────────────────────────────
+const snrGroups = {
+  core: ['BPSK','QPSK','8PSK','FM_WB','FM_NB','GMSK','OFDM','4FSK'],
+  proto: ['AIS','ADS_B','DMR','POCSAG','P25_C4FM','CSS','LFM'],
+  qam: ['QAM16','QAM64','QAM256'],
+  all: Object.keys(DATA.class_snr)
+};
+
+let snrChart = null;
+function renderSnrChart(groupKey) {
+  const classes = snrGroups[groupKey];
+  const labels = ['-10','-5','0','5','10','15','20','25','30'];
+  const datasets = classes.map((cn, i) => ({
+    label: cn,
+    data: labels.map(s => DATA.class_snr[cn]?.[s] ?? null),
+    borderColor: PALETTE[i % PALETTE.length],
+    backgroundColor: 'transparent',
+    tension: 0.3, pointRadius: 4, pointHoverRadius: 6,
+    borderWidth: 2,
+  }));
+  if (snrChart) snrChart.destroy();
+  snrChart = new Chart(document.getElementById('chartClassSnr'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: { ...chartDefaults,
+      scales: {
+        x: { ...chartDefaults.scales.x, title:{display:true,text:'SNR (dB)',color:'#768390'} },
+        y: { ...chartDefaults.scales.y, title:{display:true,text:'Accuracy (%)',color:'#768390'} }
+      }
+    }
+  });
+}
+renderSnrChart('core');
+
+document.querySelectorAll('#classSnrFilterRow .filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#classSnrFilterRow .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderSnrChart(btn.dataset.snrgroup);
+  });
+});
+
+// ── Chart 4: Hard classes ─────────────────────────────────────────────────────
+const hard = Object.entries(DATA.class_acc)
+  .filter(([,v]) => v < 50)
+  .sort(([,a],[,b]) => a - b);
+new Chart(document.getElementById('chartHard'), {
+  type: 'bar',
+  data: {
+    labels: hard.map(([k]) => k),
+    datasets: [{ label: 'Accuracy', data: hard.map(([,v]) => v),
+      backgroundColor: hard.map(([,v]) => v < 10 ? '#f85149' : v < 25 ? '#d29922aa' : '#d2992266'),
+      borderRadius: 3 }]
+  },
+  options: { ...chartDefaults,
+    scales: {
+      x: { ticks:{color:'#cdd9e5',font:{size:11}}, grid:{color:'#1c2128'} },
+      y: { ...chartDefaults.scales.y, max: 55, title:{display:true,text:'Accuracy (%)',color:'#768390'} }
+    }
+  }
+});
+
+// Sidebar active tracking
+function setActive() {
+  const threshold = window.scrollY + 160;
+  let cur = null, mx = -Infinity;
+  document.querySelectorAll('#nav a[href^="#"]').forEach(a => {
+    const el = document.getElementById(a.getAttribute('href').slice(1));
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY;
+    if (top <= threshold && top > mx) { mx = top; cur = a; }
+  });
+  document.querySelectorAll('#nav a').forEach(a => a.classList.remove('active'));
+  if (cur) cur.classList.add('active');
+}
+window.addEventListener('scroll', setActive, {passive:true});
+window.addEventListener('load', setActive);
+</script>
+</body>
+</html>
