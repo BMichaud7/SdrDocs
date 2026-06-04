@@ -1,33 +1,49 @@
-name: Deploy to GitHub Pages
+name: Deploy
 
 on:
   push:
     branches: ["main/1.0"]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
 jobs:
   deploy:
-    runs-on: ubuntu-24.04
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/configure-pages@v5
+      - name: Deploy Sdr/ to bmichaud.com
+        env:
+          DEPLOY_KEY: ${{ secrets.DOCS_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p 21098 bmichaud.com >> ~/.ssh/known_hosts 2>/dev/null
 
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: '.'
+          # Deploy all SdrDocs files to /Sdr/
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p 21098 -o StrictHostKeyChecking=no" \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='docs/' \
+            . \
+            bmicmqfq@bmichaud.com:~/public_html/Sdr/
 
-      - id: deploy
-        uses: actions/deploy-pages@v4
+          echo "Deployed to https://bmichaud.com/Sdr/"
+
+      - name: Update root index from pages.json
+        env:
+          DEPLOY_KEY: ${{ secrets.DOCS_DEPLOY_KEY }}
+        run: |
+          # The root index.html fetches /Sdr/pages.json at load time.
+          # pages.json was just deployed above — nothing else to do for the root.
+          # This step exists as a reminder: to add a new page, update pages.json.
+          echo "pages.json deployed — bmichaud.com/ will reflect changes on next load."
+          echo "Pages in directory:"
+          python3 -c "
+import json
+with open('pages.json') as f:
+    pages = json.load(f)
+for p in pages:
+    print(f'  {p[\"icon\"]} {p[\"title\"]} → {p[\"url\"]}')
+"

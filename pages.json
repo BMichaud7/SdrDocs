@@ -1,0 +1,37 @@
+[
+  {
+    "icon": "📡",
+    "title": "Open RF Stack",
+    "desc": "SDR platform — signal detection, classification, demodulation, direction finding, voice transcription",
+    "url": "/Sdr/",
+    "label": "/Sdr/"
+  },
+  {
+    "icon": "📊",
+    "title": "ML Accuracy Charts",
+    "desc": "47-class model — per-SNR and per-class accuracy from 158k held-out test samples",
+    "url": "/Sdr/accuracy.html",
+    "label": "/Sdr/accuracy.html"
+  },
+  {
+    "icon": "🌊",
+    "title": "Signal Spectrograms",
+    "desc": "Animated time-frequency signatures for all 25+ supported protocols",
+    "url": "/Sdr/spectrograms.html",
+    "label": "/Sdr/spectrograms.html"
+  },
+  {
+    "icon": "🔧",
+    "title": "SDR Calculators",
+    "desc": "IQ buffer size, DF antenna spacing, CFAR threshold visualiser, SNR → confidence estimator",
+    "url": "/Sdr/tools.html",
+    "label": "/Sdr/tools.html"
+  },
+  {
+    "icon": "📖",
+    "title": "API Documentation",
+    "desc": "Doxygen HTML for all 10 OpenRFStack repos — auto-updated by GitHub Actions on every push",
+    "url": "/Sdr/docs/",
+    "label": "/Sdr/docs/"
+  }
+]
