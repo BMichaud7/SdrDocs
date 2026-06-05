@@ -63,6 +63,13 @@
     "label": "/Sdr/deploy.html"
   },
   {
+    "icon": "📐",
+    "title": "Scalability Guide",
+    "desc": "How many of each component to run, AMQP routing, bottleneck detection, and an interactive instance calculator",
+    "url": "/Sdr/scaling.html",
+    "label": "/Sdr/scaling.html"
+  },
+  {
     "icon": "📖",
     "title": "API Documentation",
     "desc": "Doxygen HTML for all 10 OpenRFStack repos — auto-updated by GitHub Actions on every push",

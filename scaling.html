@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Scalability Guide — Open RF Stack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+.section-label { font-size:.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:2rem 0 .75rem }
+
+/* Tier cards */
+.tier-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:1.2rem; margin:1.2rem 0 }
+.tier-card { background:var(--bg2); border:1px solid var(--bd); border-radius:var(--r); overflow:hidden }
+.tier-head { padding:1rem 1.2rem; border-bottom:1px solid var(--bd) }
+.tier-head h3 { font-size:.95rem; font-weight:700; color:#fff; margin-bottom:.2rem }
+.tier-head p  { font-size:.78rem; color:var(--muted) }
+.tier-badge { display:inline-block; font-size:.68rem; font-weight:700; padding:.15rem .55rem; border-radius:2rem; margin-bottom:.4rem }
+.badge-min  { background:rgba(63,185,80,.12);  color:var(--green);  border:1px solid rgba(63,185,80,.25) }
+.badge-mid  { background:rgba(79,158,255,.12); color:var(--blue);   border:1px solid rgba(79,158,255,.25) }
+.badge-large{ background:rgba(188,140,255,.12);color:var(--purple); border:1px solid rgba(188,140,255,.25) }
+.tier-body { padding:1rem 1.2rem }
+.tier-row { display:flex; justify-content:space-between; align-items:center; padding:.3rem 0; border-bottom:1px solid var(--bd); font-size:.82rem }
+.tier-row:last-child { border-bottom:none }
+.tier-app  { color:var(--muted) }
+.tier-count{ font-family:'JetBrains Mono',monospace; font-weight:700; color:#fff }
+.tier-count.green  { color:var(--green) }
+.tier-count.blue   { color:var(--blue) }
+.tier-count.orange { color:var(--orange) }
+.tier-count.purple { color:var(--purple) }
+
+/* Rules table */
+.rules-wrap { overflow-x:auto; margin:1.2rem 0 }
+.rules-table { width:100%; border-collapse:collapse; font-size:.82rem }
+.rules-table th { background:var(--bg3); color:var(--muted); font-weight:600; font-size:.73rem; text-transform:uppercase; letter-spacing:.05em; padding:.55rem .9rem; border:1px solid var(--bd); text-align:left; white-space:nowrap }
+.rules-table td { padding:.55rem .9rem; border:1px solid var(--bd); vertical-align:top; line-height:1.55 }
+.rules-table tr:nth-child(even) td { background:rgba(255,255,255,.015) }
+.rules-table .app-name { font-family:'JetBrains Mono',monospace; font-weight:700; color:#fff; white-space:nowrap }
+.rules-table .rule { color:var(--blue); font-family:'JetBrains Mono',monospace; font-size:.78rem; white-space:nowrap }
+.rules-table .limit { color:var(--orange); font-size:.78rem }
+.rules-table .note { color:var(--muted); font-size:.78rem }
+
+/* Arch diagrams */
+.arch-wrap { background:var(--bg2); border:1px solid var(--bd); border-radius:var(--r); padding:1.4rem; margin:1.2rem 0; overflow-x:auto }
+.arch-wrap h4 { font-size:.82rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; margin-bottom:1rem }
+.arch-wrap pre { font-family:'JetBrains Mono',monospace; font-size:.77rem; color:var(--tx); line-height:1.65; white-space:pre }
+.arch-wrap .c-acq  { color:var(--blue) }
+.arch-wrap .c-dem  { color:var(--teal) }
+.arch-wrap .c-ana  { color:var(--purple) }
+.arch-wrap .c-spch { color:var(--orange) }
+.arch-wrap .c-bus  { color:var(--green) }
+.arch-wrap .c-muted{ color:var(--muted) }
+
+/* Bottleneck guide */
+.bn-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:1rem; margin:1.2rem 0 }
+.bn-card { background:var(--bg2); border:1px solid var(--bd); border-radius:var(--r); padding:1.1rem 1.2rem }
+.bn-card h4 { font-size:.88rem; font-weight:700; color:#fff; margin-bottom:.5rem; display:flex; align-items:center; gap:.5rem }
+.bn-symptom { font-size:.8rem; color:var(--muted); margin-bottom:.6rem; line-height:1.6 }
+.bn-fix { font-size:.8rem; color:var(--tx); line-height:1.6 }
+.bn-fix code { font-family:'JetBrains Mono',monospace; color:var(--teal); font-size:.75rem }
+.bn-icon { font-size:1rem }
+
+/* AMQP routing */
+.amqp-table { width:100%; border-collapse:collapse; font-size:.8rem; margin:1rem 0 }
+.amqp-table th { background:var(--bg3); color:var(--muted); font-weight:600; font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; padding:.5rem .85rem; border:1px solid var(--bd); text-align:left }
+.amqp-table td { padding:.45rem .85rem; border:1px solid var(--bd); vertical-align:middle }
+.amqp-table tr:nth-child(even) td { background:rgba(255,255,255,.015) }
+.amqp-table .addr { font-family:'JetBrains Mono',monospace; color:var(--teal); font-size:.75rem }
+.amqp-table .prod { color:var(--blue); font-size:.78rem }
+.amqp-table .cons { color:var(--green); font-size:.78rem }
+
+.tip-box { background:var(--bg3); border:1px solid var(--bd2); border-left:3px solid var(--blue); border-radius:var(--r); padding:.9rem 1.1rem; font-size:.85rem; line-height:1.7; margin:.75rem 0 }
+.warn-box { background:rgba(210,153,34,.07); border:1px solid rgba(210,153,34,.25); border-left:3px solid var(--orange); border-radius:var(--r); padding:.9rem 1.1rem; font-size:.85rem; line-height:1.7; margin:.75rem 0 }
+.tip-box strong, .warn-box strong { color:#fff }
+
+/* Slider demo */
+.slider-demo { background:var(--bg2); border:1px solid var(--bd); border-radius:var(--r); padding:1.4rem; margin:1.2rem 0 }
+.slider-demo h4 { font-size:.88rem; font-weight:700; color:#fff; margin-bottom:1rem }
+.slider-row { display:flex; align-items:center; gap:1rem; margin-bottom:.75rem; flex-wrap:wrap }
+.slider-row label { font-size:.8rem; color:var(--muted); min-width:140px }
+.slider-row input[type=range] { flex:1; accent-color:var(--blue); min-width:120px }
+.slider-row .val { font-family:'JetBrains Mono',monospace; font-size:.82rem; color:var(--tx); min-width:40px; text-align:right }
+.config-out { background:var(--bg3); border:1px solid var(--bd2); border-radius:6px; padding:.85rem 1rem; font-family:'JetBrains Mono',monospace; font-size:.78rem; color:var(--tx); line-height:1.8; margin-top:.75rem; white-space:pre }
+.co-g { color:var(--green) }
+.co-b { color:var(--blue) }
+.co-m { color:var(--muted) }
+</style>
+</head>
+<body>
+
+<nav id="nav" style="padding-top:.75rem">
+  <a class="nav-logo" href="index.html"><span>📡</span> Open RF Stack</a>
+  <div class="nav-sep">Scalability</div>
+  <a href="#rules">Scaling Rules</a>
+  <a href="#tiers">Deployment Tiers</a>
+  <a href="#diagrams">Architecture Diagrams</a>
+  <a href="#amqp">AMQP Routing</a>
+  <a href="#bottlenecks">Bottleneck Guide</a>
+  <a href="#calculator">Instance Calculator</a>
+  <div class="nav-sep">Pages</div>
+  <a href="index.html">← Documentation</a>
+  <a href="benchmark.html">Benchmarks</a>
+  <a href="deploy.html">Deployment Guide</a>
+  <a href="hardware.html">Hardware Compat</a>
+  <a href="spectrograms.html">Spectrograms</a>
+  <a href="accuracy.html">Accuracy Charts</a>
+  <a href="tools.html">Calculators</a>
+  <a href="frequency.html">Frequency Explorer</a>
+  <a href="protocols.html">Protocol Examples</a>
+</nav>
+
+<header>
+  <div class="hdr">
+    <div class="hdr-top">
+      <div class="logo-wrap">📐</div>
+      <div>
+        <h1>Scalability Guide</h1>
+        <p>How many of each component to run, how they partition work across AMQP, how to spot bottlenecks, and worked examples from single-SDR to multi-node cluster deployments.</p>
+      </div>
+    </div>
+    <div class="hdr-meta">
+      <span class="tag">Per-component rules</span>
+      <span class="tag">3 deployment tiers</span>
+      <span class="tag">AMQP partitioning</span>
+      <span class="tag">Bottleneck detection</span>
+    </div>
+  </div>
+</header>
+
+<main>
+<div class="content">
+
+<!-- Scaling rules -->
+<p class="section-label" id="rules">Per-Component Scaling Rules</p>
+
+<div class="rules-wrap">
+<table class="rules-table">
+  <thead>
+    <tr>
+      <th>Component</th>
+      <th>Scale with</th>
+      <th>Rule of thumb</th>
+      <th>Max per host</th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="app-name">SdrResourceManager</span></td>
+      <td>Hosts with USB SDRs</td>
+      <td><span class="rule">1 per physical host</span></td>
+      <td>1</td>
+      <td class="note">Arbitrates all USB SDR devices on one machine. Run one per node in a multi-node cluster. Stateless — restart is safe.</td>
+    </tr>
+    <tr>
+      <td><span class="app-name">AcquisitionApp</span></td>
+      <td>SDR devices / frequency bands</td>
+      <td><span class="rule">1 per SDR channel</span></td>
+      <td>8–12 (CPU bound)</td>
+      <td class="note">One instance owns one SDR + one frequency band. To cover multiple bands on a wideband SDR, run one instance per band and time-share via SdrResourceManager task scheduling.</td>
+    </tr>
+    <tr>
+      <td><span class="app-name">DemodApp</span></td>
+      <td>Active protocols / signal volume</td>
+      <td><span class="rule">1 per 4–6 active demodulators</span></td>
+      <td>4–6 (per 12-core CPU)</td>
+      <td class="note">Each instance handles a subset of protocols. Partition by category: one instance for aviation (ADS-B/ACARS/VDL2), one for maritime (AIS/DSC), one for land mobile (P25/DMR). AMQP anycast balances load automatically.</td>
+    </tr>
+    <tr>
+      <td><span class="app-name">AnalysisApp</span></td>
+      <td>GPUs / classification throughput</td>
+      <td><span class="rule">1 per GPU</span></td>
+      <td>1 per GPU (or N CPU instances)</td>
+      <td class="note">ONNX Runtime pins to a single device. For CPU-only: add instances until CPU saturation — each takes ~65% of one core at continuous load. Multiple instances consume the same AMQP queue competitively (anycast).</td>
+    </tr>
+    <tr>
+      <td><span class="app-name">SpeechApp</span></td>
+      <td>Simultaneous P25 voice channels</td>
+      <td><span class="rule">1 per 2–3 concurrent voice streams</span></td>
+      <td>4 GPU / 2 CPU</td>
+      <td class="note">whisper.cpp processes one audio segment at a time per instance. A busy trunked system may have 10+ simultaneous voice grants. Scale instances until queue depth stays below 2× realtime. GPU realtime factor is 0.12× (very fast).</td>
+    </tr>
+    <tr>
+      <td><span class="app-name">DfApp</span></td>
+      <td>Coherent SDR pairs</td>
+      <td><span class="rule">1 per 2-channel coherent SDR pair</span></td>
+      <td>N/A (hardware limited)</td>
+      <td class="note">MUSIC direction finding requires phase-coherent dual Rx (USRP B210 or two synchronized PlutoSDRs). One DfApp instance per coherent hardware pair. Cannot parallelize beyond hardware.</td>
+    </tr>
+    <tr>
+      <td><span class="app-name">Apache Artemis</span></td>
+      <td>Message throughput</td>
+      <td><span class="rule">1 broker for up to ~50k msg/s</span></td>
+      <td>1 (add federation for multi-site)</td>
+      <td class="note">Single Artemis broker handles typical deployments comfortably. For multi-site (geographically distributed SDRs) use Artemis federation to bridge brokers. Each site runs its own broker.</td>
+    </tr>
+    <tr>
+      <td><span class="app-name">PostgreSQL</span></td>
+      <td>Alert write rate</td>
+      <td><span class="rule">1 instance handles all writes</span></td>
+      <td>1 primary (add read replicas for dashboards)</td>
+      <td class="note">Alert insert rate is low (tens/minute). PostgreSQL is not a bottleneck. Add a read replica only if Grafana/dashboard queries slow down the primary.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- Deployment tiers -->
+<p class="section-label" id="tiers">Deployment Tiers</p>
+<div class="tier-grid">
+
+  <div class="tier-card">
+    <div class="tier-head">
+      <span class="tier-badge badge-min">Minimal</span>
+      <h3>Single SDR, one PC</h3>
+      <p>RTL-SDR or PlutoSDR · laptop or desktop · no GPU required</p>
+    </div>
+    <div class="tier-body">
+      <div class="tier-row"><span class="tier-app">SdrResourceManager</span><span class="tier-count green">×1</span></div>
+      <div class="tier-row"><span class="tier-app">AcquisitionApp</span><span class="tier-count green">×1</span></div>
+      <div class="tier-row"><span class="tier-app">DemodApp</span><span class="tier-count green">×1</span></div>
+      <div class="tier-row"><span class="tier-app">AnalysisApp (CPU)</span><span class="tier-count green">×1</span></div>
+      <div class="tier-row"><span class="tier-app">SpeechApp</span><span class="tier-count green">×1</span></div>
+      <div class="tier-row"><span class="tier-app">DfApp</span><span class="tier-count" style="color:var(--dim)">—</span></div>
+      <div class="tier-row"><span class="tier-app">Apache Artemis</span><span class="tier-count green">×1</span></div>
+      <div class="tier-row"><span class="tier-app">PostgreSQL</span><span class="tier-count green">×1</span></div>
+      <div class="tier-row" style="margin-top:.4rem;border-top:1px solid var(--bd);padding-top:.4rem">
+        <span class="tier-app" style="font-size:.76rem">Total RAM</span>
+        <span class="tier-count" style="font-size:.76rem;color:var(--muted)">~1 GB</span>
+      </div>
+      <div class="tier-row">
+        <span class="tier-app" style="font-size:.76rem">CPU cores</span>
+        <span class="tier-count" style="font-size:.76rem;color:var(--muted)">4+ cores</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tier-card">
+    <div class="tier-head">
+      <span class="tier-badge badge-mid">Medium</span>
+      <h3>4 SDRs, dedicated server</h3>
+      <p>Mix of RTL-SDR + PlutoSDR · i7/Ryzen + RTX 3060 · Ubuntu server</p>
+    </div>
+    <div class="tier-body">
+      <div class="tier-row"><span class="tier-app">SdrResourceManager</span><span class="tier-count blue">×1</span></div>
+      <div class="tier-row"><span class="tier-app">AcquisitionApp</span><span class="tier-count blue">×4</span></div>
+      <div class="tier-row"><span class="tier-app">DemodApp</span><span class="tier-count blue">×2</span></div>
+      <div class="tier-row"><span class="tier-app">AnalysisApp (GPU)</span><span class="tier-count blue">×1</span></div>
+      <div class="tier-row"><span class="tier-app">SpeechApp</span><span class="tier-count blue">×2</span></div>
+      <div class="tier-row"><span class="tier-app">DfApp</span><span class="tier-count blue">×1</span></div>
+      <div class="tier-row"><span class="tier-app">Apache Artemis</span><span class="tier-count blue">×1</span></div>
+      <div class="tier-row"><span class="tier-app">PostgreSQL</span><span class="tier-count blue">×1</span></div>
+      <div class="tier-row" style="margin-top:.4rem;border-top:1px solid var(--bd);padding-top:.4rem">
+        <span class="tier-app" style="font-size:.76rem">Total RAM</span>
+        <span class="tier-count" style="font-size:.76rem;color:var(--muted)">~3.5 GB</span>
+      </div>
+      <div class="tier-row">
+        <span class="tier-app" style="font-size:.76rem">CPU cores</span>
+        <span class="tier-count" style="font-size:.76rem;color:var(--muted)">12+ cores</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tier-card">
+    <div class="tier-head">
+      <span class="tier-badge badge-large">Large</span>
+      <h3>10+ SDRs, multi-node cluster</h3>
+      <p>USRP B210s + RTL-SDR · k3s cluster · multiple GPUs</p>
+    </div>
+    <div class="tier-body">
+      <div class="tier-row"><span class="tier-app">SdrResourceManager</span><span class="tier-count purple">×N nodes</span></div>
+      <div class="tier-row"><span class="tier-app">AcquisitionApp</span><span class="tier-count purple">×10–20</span></div>
+      <div class="tier-row"><span class="tier-app">DemodApp</span><span class="tier-count purple">×4–6</span></div>
+      <div class="tier-row"><span class="tier-app">AnalysisApp (GPU)</span><span class="tier-count purple">×N GPUs</span></div>
+      <div class="tier-row"><span class="tier-app">SpeechApp</span><span class="tier-count purple">×4–8</span></div>
+      <div class="tier-row"><span class="tier-app">DfApp</span><span class="tier-count purple">×N pairs</span></div>
+      <div class="tier-row"><span class="tier-app">Apache Artemis</span><span class="tier-count purple">×1 + federation</span></div>
+      <div class="tier-row"><span class="tier-app">PostgreSQL</span><span class="tier-count purple">×1 + replicas</span></div>
+      <div class="tier-row" style="margin-top:.4rem;border-top:1px solid var(--bd);padding-top:.4rem">
+        <span class="tier-app" style="font-size:.76rem">Total RAM</span>
+        <span class="tier-count" style="font-size:.76rem;color:var(--muted)">10–30 GB</span>
+      </div>
+      <div class="tier-row">
+        <span class="tier-app" style="font-size:.76rem">CPU cores</span>
+        <span class="tier-count" style="font-size:.76rem;color:var(--muted)">40+ cores</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Architecture diagrams -->
+<p class="section-label" id="diagrams">Architecture Diagrams</p>
+
+<div class="arch-wrap">
+  <h4>Minimal — 1 SDR, 1 host</h4>
+  <pre>
+  <span class="c-muted">┌─────────────────────────── single host ──────────────────────────────┐</span>
+  <span class="c-muted">│</span>                                                                      <span class="c-muted">│</span>
+  <span class="c-muted">│</span>  USB ──► <span class="c-acq">[SdrResourceManager]</span> ──► <span class="c-acq">[AcquisitionApp ×1]</span>              <span class="c-muted">│</span>
+  <span class="c-muted">│</span>                                            │                         <span class="c-muted">│</span>
+  <span class="c-muted">│</span>                                   <span class="c-bus">[Artemis AMQP]</span>                   <span class="c-muted">│</span>
+  <span class="c-muted">│</span>                          ┌─────────────┼────────────┐               <span class="c-muted">│</span>
+  <span class="c-muted">│</span>                    <span class="c-dem">[DemodApp]</span>    <span class="c-ana">[AnalysisApp]</span>  <span class="c-spch">[SpeechApp]</span>          <span class="c-muted">│</span>
+  <span class="c-muted">│</span>                          └──────────── [PostgreSQL] ──────────────  <span class="c-muted">│</span>
+  <span class="c-muted">│</span>                                                                      <span class="c-muted">│</span>
+  <span class="c-muted">└──────────────────────────────────────────────────────────────────────┘</span>
+  </pre>
+</div>
+
+<div class="arch-wrap">
+  <h4>Medium — 4 SDRs, partitioned DemodApp instances</h4>
+  <pre>
+  <span class="c-muted">┌─────────────────────────────────────────── single host ──────────────────────────────────────────┐</span>
+  <span class="c-muted">│</span>                                                                                                  <span class="c-muted">│</span>
+  <span class="c-muted">│</span>  USB SDR ×4 ──► <span class="c-acq">[SdrResourceManager]</span>                                                         <span class="c-muted">│</span>
+  <span class="c-muted">│</span>                       │                                                                         <span class="c-muted">│</span>
+  <span class="c-muted">│</span>         ┌─────────────┼────────────┬─────────────┐                                             <span class="c-muted">│</span>
+  <span class="c-muted">│</span>   <span class="c-acq">[Acq 100MHz]</span>  <span class="c-acq">[Acq 433MHz]</span>  <span class="c-acq">[Acq 850MHz]</span>  <span class="c-acq">[Acq 1090MHz]</span>                               <span class="c-muted">│</span>
+  <span class="c-muted">│</span>         └─────────────┴────────────┴─────────────┘                                             <span class="c-muted">│</span>
+  <span class="c-muted">│</span>                                    │                                                            <span class="c-muted">│</span>
+  <span class="c-muted">│</span>                          <span class="c-bus">[Artemis AMQP broker]</span>                                                <span class="c-muted">│</span>
+  <span class="c-muted">│</span>             ┌────────────┬──────────┴───────────┬──────────────┐                               <span class="c-muted">│</span>
+  <span class="c-muted">│</span>   <span class="c-dem">[Demod: Aviation]</span>  <span class="c-dem">[Demod: Maritime]</span>   <span class="c-ana">[AnalysisApp GPU]</span>  <span class="c-spch">[SpeechApp ×2]</span>              <span class="c-muted">│</span>
+  <span class="c-muted">│</span>   <span class="c-muted">ADS-B/ACARS/VDL2</span>   <span class="c-muted">AIS/DSC/NAVTEX</span>            │                                             <span class="c-muted">│</span>
+  <span class="c-muted">│</span>             └────────────┴──────────┬───────────┴──────────────┘                               <span class="c-muted">│</span>
+  <span class="c-muted">│</span>                                    │                                                            <span class="c-muted">│</span>
+  <span class="c-muted">│</span>                             [PostgreSQL] ◄── [signal_logger]                                    <span class="c-muted">│</span>
+  <span class="c-muted">│</span>                                                                                                  <span class="c-muted">│</span>
+  <span class="c-muted">└──────────────────────────────────────────────────────────────────────────────────────────────────┘</span>
+  </pre>
+</div>
+
+<div class="arch-wrap">
+  <h4>Large — multi-node cluster, federated brokers</h4>
+  <pre>
+  <span class="c-muted">┌────────── Node A (SDR site 1) ──────────┐    ┌────────── Node B (SDR site 2) ──────────┐</span>
+  <span class="c-muted">│</span> <span class="c-acq">[SdrRM] ──► [Acq ×6]</span>                  <span class="c-muted">│</span>    <span class="c-muted">│</span> <span class="c-acq">[SdrRM] ──► [Acq ×4]</span>                  <span class="c-muted">│</span>
+  <span class="c-muted">│</span>                  │                      <span class="c-muted">│</span>    <span class="c-muted">│</span>                  │                      <span class="c-muted">│</span>
+  <span class="c-muted">│</span>         <span class="c-bus">[Artemis broker A]</span>             <span class="c-muted">│◄──►│</span>         <span class="c-bus">[Artemis broker B]</span>             <span class="c-muted">│</span>
+  <span class="c-muted">│</span>                  │                      <span class="c-muted">│</span>    <span class="c-muted">│</span>                  │                      <span class="c-muted">│</span>
+  <span class="c-muted">│</span> <span class="c-dem">[Demod ×2]</span> <span class="c-ana">[Analysis GPU ×1]</span>         <span class="c-muted">│</span>    <span class="c-muted">│</span> <span class="c-dem">[Demod ×2]</span> <span class="c-ana">[Analysis GPU ×1]</span>         <span class="c-muted">│</span>
+  <span class="c-muted">└─────────────────────────────────────────┘</span>    <span class="c-muted">└─────────────────────────────────────────┘</span>
+                     │                                               │
+                     └───────────────────┬───────────────────────────┘
+                                         │
+                              <span class="c-muted">┌──── Compute node ────┐</span>
+                              <span class="c-muted">│</span> <span class="c-spch">[SpeechApp ×4]</span>         <span class="c-muted">│</span>
+                              <span class="c-muted">│</span> [PostgreSQL + Grafana] <span class="c-muted">│</span>
+                              <span class="c-muted">└──────────────────────┘</span>
+  </pre>
+</div>
+
+<!-- AMQP routing -->
+<p class="section-label" id="amqp">AMQP Address & Routing</p>
+
+<p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem;line-height:1.7">All components communicate exclusively via Apache Artemis AMQP 1.0. Multiple instances of the same component share a queue — Artemis distributes messages round-robin (anycast). This means scaling is usually a matter of adding more instances without any configuration change.</p>
+
+<table class="amqp-table">
+  <thead>
+    <tr><th>AMQP Address</th><th>Producer</th><th>Consumer(s)</th><th>Routing</th><th>Notes</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="addr">iq.frames.{band}</span></td>
+      <td><span class="prod">AcquisitionApp</span></td>
+      <td><span class="cons">DemodApp, AnalysisApp</span></td>
+      <td>Multicast</td>
+      <td style="font-size:.77rem;color:var(--muted)">Each AcquisitionApp publishes to a band-specific address. All consumers that subscribe receive a copy.</td>
+    </tr>
+    <tr>
+      <td><span class="addr">classify.requests</span></td>
+      <td><span class="prod">AcquisitionApp</span></td>
+      <td><span class="cons">AnalysisApp ×N</span></td>
+      <td>Anycast</td>
+      <td style="font-size:.77rem;color:var(--muted)">All AnalysisApp instances compete on one queue. Artemis distributes round-robin — add instances to linearly scale throughput.</td>
+    </tr>
+    <tr>
+      <td><span class="addr">demod.results</span></td>
+      <td><span class="prod">DemodApp</span></td>
+      <td><span class="cons">signal_logger, AlertConsumer</span></td>
+      <td>Multicast</td>
+      <td style="font-size:.77rem;color:var(--muted)">Results fan out to all subscribers. Logger writes to PostgreSQL; AlertConsumer evaluates threat conditions.</td>
+    </tr>
+    <tr>
+      <td><span class="addr">voice.frames</span></td>
+      <td><span class="prod">DemodApp (P25)</span></td>
+      <td><span class="cons">SpeechApp ×N</span></td>
+      <td>Anycast</td>
+      <td style="font-size:.77rem;color:var(--muted)">P25 voice segments queued and consumed by whichever SpeechApp instance is free. Scale instances to keep queue depth near 0.</td>
+    </tr>
+    <tr>
+      <td><span class="addr">rf.alerts</span></td>
+      <td><span class="prod">AlertConsumer, DemodApp</span></td>
+      <td><span class="cons">AlertStore (PostgreSQL)</span></td>
+      <td>Anycast</td>
+      <td style="font-size:.77rem;color:var(--muted)">Low volume. Single consumer writes to the rf_alerts table. AlertStore is not a scaling concern.</td>
+    </tr>
+    <tr>
+      <td><span class="addr">sdr.resource.requests</span></td>
+      <td><span class="prod">AcquisitionApp</span></td>
+      <td><span class="cons">SdrResourceManager</span></td>
+      <td>Anycast</td>
+      <td style="font-size:.77rem;color:var(--muted)">RPC-style request/reply for SDR lease acquisition and release. One SdrRM per host holds all device locks.</td>
+    </tr>
+    <tr>
+      <td><span class="addr">df.estimates</span></td>
+      <td><span class="prod">DfApp</span></td>
+      <td><span class="cons">signal_logger</span></td>
+      <td>Multicast</td>
+      <td style="font-size:.77rem;color:var(--muted)">Direction-finding bearing estimates published for each detection event. Low volume, not a scaling concern.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="tip-box">
+  <strong>Anycast = free horizontal scaling.</strong> To double AnalysisApp throughput, start a second instance pointed at the same broker — no config changes needed. Artemis splits the <code>classify.requests</code> queue between both consumers automatically. Same applies to DemodApp and SpeechApp.
+</div>
+
+<!-- Bottleneck guide -->
+<p class="section-label" id="bottlenecks">Bottleneck Detection</p>
+<div class="bn-grid">
+
+  <div class="bn-card">
+    <h4><span class="bn-icon">🔵</span> AcquisitionApp overloaded</h4>
+    <div class="bn-symptom">Symptoms: IQ frame timestamps lag wall clock by &gt;100 ms. Artemis queue depth for <code>iq.frames.*</code> grows unboundedly. CPU on AcquisitionApp process &gt; 90%.</div>
+    <div class="bn-fix">Fix: add another SDR + AcquisitionApp instance on a different frequency band. Reduce <code>dwell_ms</code> or increase FFT stride. Check USB bus bandwidth — multiple RTL-SDRs on the same USB controller share 480 Mbps.</div>
+  </div>
+
+  <div class="bn-card">
+    <h4><span class="bn-icon">🟣</span> AnalysisApp queue backing up</h4>
+    <div class="bn-symptom">Symptoms: <code>classify.requests</code> queue depth &gt; 500. Classification results arrive seconds after IQ capture. GPU utilization &lt; 60% (under-batching).</div>
+    <div class="bn-fix">Fix: increase <code>batch_size</code> in analysis.xml (up to 256 on 8 GB VRAM). If GPU is already saturated, add a second GPU + AnalysisApp instance — Artemis load-balances automatically.</div>
+  </div>
+
+  <div class="bn-card">
+    <h4><span class="bn-icon">🟢</span> DemodApp dropping frames</h4>
+    <div class="bn-symptom">Symptoms: AIS or ADS-B decode count drops during high-traffic periods. Demod process CPU &gt; 80%. Log shows <code>frame dropped — demod busy</code>.</div>
+    <div class="bn-fix">Fix: split protocols across two DemodApp instances (e.g., aviation in one, maritime in another). Each instance subscribes only to the <code>iq.frames.*</code> addresses it needs — configure <code>protocols</code> list in demod.xml.</div>
+  </div>
+
+  <div class="bn-card">
+    <h4><span class="bn-icon">🟠</span> SpeechApp transcript lag</h4>
+    <div class="bn-symptom">Symptoms: <code>voice.frames</code> queue depth grows during active P25 traffic. Transcripts arrive &gt;10 s after audio capture. whisper.cpp realtime factor degrades.</div>
+    <div class="bn-fix">Fix: add SpeechApp instances — each consumes from the same anycast queue. On CPU: each instance uses ~85% of one core. On GPU: 4 instances share one GPU comfortably (0.12× realtime factor per instance). Start with 1 instance per 3 concurrent voice grants.</div>
+  </div>
+
+  <div class="bn-card">
+    <h4><span class="bn-icon">🔴</span> Artemis broker memory pressure</h4>
+    <div class="bn-symptom">Symptoms: Artemis heap usage &gt; 80%. Messages start spilling to disk (address paging). Latency spikes. Artemis console shows high queue depth on multiple addresses.</div>
+    <div class="bn-fix">Fix: identify slow consumers with <code>artemis queue stat</code>. Scale the slow consumer. For multi-site: use Artemis federation — each site processes its own traffic locally and only forwards alerts to the central node.</div>
+  </div>
+
+  <div class="bn-card">
+    <h4><span class="bn-icon">⚪</span> PostgreSQL write latency</h4>
+    <div class="bn-symptom">Symptoms: signal_logger log shows INSERT latency &gt; 50 ms. AlertStore commit times spike. Postgres CPU &gt; 80% (rare — usually means too many concurrent connections).</div>
+    <div class="bn-fix">Fix: PostgreSQL is almost never the bottleneck at SDR scales. If it is, add a connection pooler (PgBouncer). Consider partitioning the <code>rf_signals</code> table by day if it exceeds 100M rows. Add indexes on <code>timestamp</code> and <code>frequency_hz</code>.</div>
+  </div>
+
+</div>
+
+<!-- Instance calculator -->
+<p class="section-label" id="calculator">Instance Calculator</p>
+
+<div class="slider-demo">
+  <h4>Estimate your deployment</h4>
+  <div class="slider-row">
+    <label>SDR devices</label>
+    <input type="range" id="sl-sdrs" min="1" max="20" value="2">
+    <span class="val" id="v-sdrs">2</span>
+  </div>
+  <div class="slider-row">
+    <label>Active protocols</label>
+    <input type="range" id="sl-protos" min="1" max="12" value="4">
+    <span class="val" id="v-protos">4</span>
+  </div>
+  <div class="slider-row">
+    <label>GPUs available</label>
+    <input type="range" id="sl-gpus" min="0" max="4" value="1">
+    <span class="val" id="v-gpus">1</span>
+  </div>
+  <div class="slider-row">
+    <label>Concurrent P25 voice</label>
+    <input type="range" id="sl-voice" min="0" max="20" value="3">
+    <span class="val" id="v-voice">3</span>
+  </div>
+  <div class="slider-row">
+    <label>DF pairs (coherent)</label>
+    <input type="range" id="sl-df" min="0" max="4" value="0">
+    <span class="val" id="v-df">0</span>
+  </div>
+
+  <div class="config-out" id="calc-out"></div>
+</div>
+
+<div class="warn-box">
+  <strong>Note on SdrResourceManager and multi-host deployments:</strong> SdrResourceManager must run on the same physical host as the USB SDR devices — it cannot proxy USB devices over a network. In a multi-node cluster, run one SdrResourceManager per node that has SDRs attached. All other components (DemodApp, AnalysisApp, SpeechApp) can run on any node that has network access to the AMQP broker.
+</div>
+
+</div>
+</main>
+
+<script src="app.js"></script>
+<script>
+function calc() {
+  const sdrs   = +document.getElementById('sl-sdrs').value;
+  const protos = +document.getElementById('sl-protos').value;
+  const gpus   = +document.getElementById('sl-gpus').value;
+  const voice  = +document.getElementById('sl-voice').value;
+  const df     = +document.getElementById('sl-df').value;
+
+  const acq    = sdrs;
+  const demod  = Math.max(1, Math.ceil(protos / 5));
+  const ana    = gpus > 0 ? gpus : Math.max(1, Math.ceil(sdrs / 4));
+  const speech = voice === 0 ? 0 : Math.max(1, Math.ceil(voice / 3));
+  const anaNote = gpus > 0 ? `(1 per GPU)` : `(CPU mode — ${ana} instance${ana>1?'s':''})`;
+  const ram_gb = (0.048 * acq + 0.062 * demod + 0.31 * ana + 0.32 * speech + 0.18).toFixed(1);
+  const cores  = Math.max(4, acq * 1.5 + demod * 2 + (gpus > 0 ? 2 : ana * 8) + speech * (gpus > 0 ? 1 : 5) + 2);
+
+  document.getElementById('calc-out').innerHTML =
+`<span class="co-m"># Recommended instance counts</span>
+<span class="co-b">SdrResourceManager</span>  ×<span class="co-g">1</span>         <span class="co-m">(1 per host with USB SDRs)</span>
+<span class="co-b">AcquisitionApp    </span>  ×<span class="co-g">${String(acq).padEnd(9)}</span> <span class="co-m">(1 per SDR device)</span>
+<span class="co-b">DemodApp          </span>  ×<span class="co-g">${String(demod).padEnd(9)}</span> <span class="co-m">(1 per ~5 active protocols)</span>
+<span class="co-b">AnalysisApp       </span>  ×<span class="co-g">${String(ana).padEnd(9)}</span> <span class="co-m">${anaNote}</span>
+<span class="co-b">SpeechApp         </span>  ×<span class="co-g">${String(speech).padEnd(9)}</span> <span class="co-m">(1 per ~3 concurrent voice streams)</span>
+<span class="co-b">DfApp             </span>  ×<span class="co-g">${String(df).padEnd(9)}</span> <span class="co-m">(1 per coherent SDR pair)</span>
+<span class="co-b">Apache Artemis    </span>  ×<span class="co-g">1</span>
+<span class="co-b">PostgreSQL        </span>  ×<span class="co-g">1</span>
+
+<span class="co-m"># Estimated resource footprint</span>
+<span class="co-b">RAM               </span>  ~<span class="co-g">${ram_gb} GB</span>
+<span class="co-b">CPU cores needed  </span>  ~<span class="co-g">${Math.ceil(cores)} cores</span>`;
+}
+
+['sl-sdrs','sl-protos','sl-gpus','sl-voice','sl-df'].forEach(id => {
+  const el = document.getElementById(id);
+  const vid = 'v-' + id.slice(3);
+  el.addEventListener('input', () => {
+    document.getElementById(vid).textContent = el.value;
+    calc();
+  });
+});
+calc();
+</script>
+</body>
+</html>
