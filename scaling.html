@@ -156,10 +156,10 @@
     </tr>
     <tr>
       <td><span class="app-name">AcquisitionApp</span></td>
-      <td>SDR devices / frequency bands</td>
-      <td><span class="rule">1 per SDR channel</span></td>
-      <td>8–12 (CPU bound)</td>
-      <td class="note">One instance owns one SDR + one frequency band. To cover multiple bands on a wideband SDR, run one instance per band and time-share via SdrResourceManager task scheduling.</td>
+      <td>Physical hosts with SDRs attached</td>
+      <td><span class="rule">1 per host</span></td>
+      <td>1 per host</td>
+      <td class="note">One process manages all SDRs on the host. At startup it sends a HEALTH_QUERY to SdrRM, learns how many devices are online, then auto-splits configured bands into equal frequency slices — one slice per device. No manual device count config needed. Run a second instance only if SDRs are on a different physical machine.</td>
     </tr>
     <tr>
       <td><span class="app-name">DemodApp</span></td>
@@ -245,7 +245,7 @@
     </div>
     <div class="tier-body">
       <div class="tier-row"><span class="tier-app">SdrResourceManager</span><span class="tier-count blue">×1</span></div>
-      <div class="tier-row"><span class="tier-app">AcquisitionApp</span><span class="tier-count blue">×4</span></div>
+      <div class="tier-row"><span class="tier-app">AcquisitionApp</span><span class="tier-count blue">×1 (auto-splits 4 bands)</span></div>
       <div class="tier-row"><span class="tier-app">DemodApp</span><span class="tier-count blue">×2</span></div>
       <div class="tier-row"><span class="tier-app">AnalysisApp (GPU)</span><span class="tier-count blue">×1</span></div>
       <div class="tier-row"><span class="tier-app">SpeechApp</span><span class="tier-count blue">×2</span></div>
@@ -271,7 +271,7 @@
     </div>
     <div class="tier-body">
       <div class="tier-row"><span class="tier-app">SdrResourceManager</span><span class="tier-count purple">×N nodes</span></div>
-      <div class="tier-row"><span class="tier-app">AcquisitionApp</span><span class="tier-count purple">×10–20</span></div>
+      <div class="tier-row"><span class="tier-app">AcquisitionApp</span><span class="tier-count purple">×N nodes (1 per host)</span></div>
       <div class="tier-row"><span class="tier-app">DemodApp</span><span class="tier-count purple">×4–6</span></div>
       <div class="tier-row"><span class="tier-app">AnalysisApp (GPU)</span><span class="tier-count purple">×N GPUs</span></div>
       <div class="tier-row"><span class="tier-app">SpeechApp</span><span class="tier-count purple">×4–8</span></div>
@@ -426,7 +426,7 @@
   <div class="bn-card">
     <h4><span class="bn-icon">🔵</span> AcquisitionApp overloaded</h4>
     <div class="bn-symptom">Symptoms: IQ frame timestamps lag wall clock by &gt;100 ms. Artemis queue depth for <code>iq.frames.*</code> grows unboundedly. CPU on AcquisitionApp process &gt; 90%.</div>
-    <div class="bn-fix">Fix: add another SDR + AcquisitionApp instance on a different frequency band. Reduce <code>dwell_ms</code> or increase FFT stride. Check USB bus bandwidth — multiple RTL-SDRs on the same USB controller share 480 Mbps.</div>
+    <div class="bn-fix">Fix: add more SDR devices — AcquisitionApp automatically queries SdrRM for device count on startup and splits bands across them. Adding a device and restarting AcquisitionApp is all that's needed. Also reduce <code>dwell_samples</code> or increase FFT stride. For Ethernet-connected SDRs (PlutoSDR) USB bus contention is not a factor; for USB SDRs avoid sharing a hub.</div>
   </div>
 
   <div class="bn-card">
@@ -522,7 +522,7 @@ function calc() {
   document.getElementById('calc-out').innerHTML =
 `<span class="co-m"># Recommended instance counts</span>
 <span class="co-b">SdrResourceManager</span>  ×<span class="co-g">1</span>         <span class="co-m">(1 per host with USB SDRs)</span>
-<span class="co-b">AcquisitionApp    </span>  ×<span class="co-g">${String(acq).padEnd(9)}</span> <span class="co-m">(1 per SDR device)</span>
+<span class="co-b">AcquisitionApp    </span>  ×<span class="co-g">${String(acq).padEnd(9)}</span> <span class="co-m">(1 per host — auto-splits ${acq} band${acq>1?'s':''} from SdrRM device count)</span>
 <span class="co-b">DemodApp          </span>  ×<span class="co-g">${String(demod).padEnd(9)}</span> <span class="co-m">(1 per ~5 active protocols)</span>
 <span class="co-b">AnalysisApp       </span>  ×<span class="co-g">${String(ana).padEnd(9)}</span> <span class="co-m">${anaNote}</span>
 <span class="co-b">SpeechApp         </span>  ×<span class="co-g">${String(speech).padEnd(9)}</span> <span class="co-m">(1 per ~3 concurrent voice streams)</span>

@@ -358,21 +358,47 @@ sudo udevadm control --reload-rules</span></pre>
 </div>
 
 <pre class="code-block"><span class="code-comment">&lt;!-- AcquisitionApp/config/scanner.xml — key fields --&gt;</span>
-&lt;<span class="code-key">scanner</span>&gt;
-  &lt;<span class="code-key">amqp</span> host=<span class="code-val">"artemis"</span> port=<span class="code-val">"5672"</span> user=<span class="code-val">"openrf"</span> password=<span class="code-val">"changeme"</span>/&gt;
-  &lt;<span class="code-key">sdr</span>  driver=<span class="code-val">"rtlsdr"</span> serial=<span class="code-val">"00000001"</span> sample_rate=<span class="code-val">"2400000"</span>/&gt;
-  &lt;<span class="code-key">scan</span> center_hz=<span class="code-val">"100000000"</span> span_hz=<span class="code-val">"2000000"</span> dwell_ms=<span class="code-val">"100"</span>/&gt;
+&lt;<span class="code-key">sdr_acquisition</span>&gt;
+  &lt;<span class="code-key">scanner_id</span>&gt;scanner-0&lt;/<span class="code-key">scanner_id</span>&gt;
+
+  &lt;<span class="code-key">amqp</span>&gt;
+    &lt;<span class="code-key">url</span>&gt;<span class="code-val">amqp://artemis:5672</span>&lt;/<span class="code-key">url</span>&gt;
+    &lt;<span class="code-key">username</span>&gt;<span class="code-val">openrf</span>&lt;/<span class="code-key">username</span>&gt;
+    &lt;<span class="code-key">password</span>&gt;<span class="code-val">changeme</span>&lt;/<span class="code-key">password</span>&gt;
+  &lt;/<span class="code-key">amqp</span>&gt;
+
+  &lt;<span class="code-key">device</span>&gt;
+    &lt;<span class="code-key">sample_rate_sps</span>&gt;<span class="code-val">10000000</span>&lt;/<span class="code-key">sample_rate_sps</span>&gt;
+    &lt;<span class="code-key">rx_gain_db</span>&gt;<span class="code-val">40</span>&lt;/<span class="code-key">rx_gain_db</span>&gt;
+  &lt;/<span class="code-key">device</span>&gt;
+
+  <span class="code-comment">&lt;!-- Shared sweep defaults (FFT size, threshold, CFAR, etc.) --&gt;</span>
+  &lt;<span class="code-key">sweep</span>&gt;
+    &lt;<span class="code-key">start_hz</span>&gt;<span class="code-val">70000000</span>&lt;/<span class="code-key">start_hz</span>&gt;
+    &lt;<span class="code-key">stop_hz</span>&gt;<span class="code-val">6000000000</span>&lt;/<span class="code-key">stop_hz</span>&gt;
+    &lt;<span class="code-key">fft_size</span>&gt;<span class="code-val">4096</span>&lt;/<span class="code-key">fft_size</span>&gt;
+    &lt;<span class="code-key">threshold_db</span>&gt;<span class="code-val">10.0</span>&lt;/<span class="code-key">threshold_db</span>&gt;
+  &lt;/<span class="code-key">sweep</span>&gt;
+
+  <span class="code-comment">&lt;!-- Optional: explicit band plan. AcquisitionApp queries SdrRM for online   --&gt;
+  &lt;!-- device count at startup and auto-splits bands so each device gets a      --&gt;
+  &lt;!-- unique non-overlapping slice. With 4 PlutoSDRs and 2 bands each band     --&gt;
+  &lt;!-- is split into 2 equal slices (4 total). Omit &lt;bands&gt; to treat the full   --&gt;
+  &lt;!-- &lt;sweep&gt; range as one band and split it across all available devices.     --&gt;</span>
+  &lt;<span class="code-key">bands</span>&gt;
+    &lt;<span class="code-key">band</span>&gt;&lt;<span class="code-key">start_hz</span>&gt;<span class="code-val">70000000</span>&lt;/<span class="code-key">start_hz</span>&gt;&lt;<span class="code-key">stop_hz</span>&gt;<span class="code-val">1100000000</span>&lt;/<span class="code-key">stop_hz</span>&gt;&lt;/<span class="code-key">band</span>&gt;
+    &lt;<span class="code-key">band</span>&gt;&lt;<span class="code-key">start_hz</span>&gt;<span class="code-val">1100000000</span>&lt;/<span class="code-key">start_hz</span>&gt;&lt;<span class="code-key">stop_hz</span>&gt;<span class="code-val">6000000000</span>&lt;/<span class="code-key">stop_hz</span>&gt;&lt;/<span class="code-key">band</span>&gt;
+  &lt;/<span class="code-key">bands</span>&gt;
 
   &lt;<span class="code-key">threat</span>&gt;
-    &lt;<span class="code-key">gps_jamming</span>    enabled=<span class="code-val">"true"</span>  ema_alpha=<span class="code-val">"0.05"</span> threshold_db=<span class="code-val">"6.0"</span>/&gt;
-    &lt;<span class="code-key">gps_spoofing</span>   enabled=<span class="code-val">"true"</span>/&gt;
-    &lt;<span class="code-key">adsb_physics</span>   enabled=<span class="code-val">"true"</span>/&gt;
-    &lt;<span class="code-key">ais_anomaly</span>    enabled=<span class="code-val">"true"</span>/&gt;
-    &lt;<span class="code-key">eas_spoof</span>      enabled=<span class="code-val">"true"</span>/&gt;
-    &lt;<span class="code-key">p25_rogue_site</span> enabled=<span class="code-val">"true"</span>/&gt;
-    &lt;<span class="code-key">p25_retune</span>     enabled=<span class="code-val">"true"</span>/&gt;
+    &lt;<span class="code-key">enabled</span>&gt;<span class="code-val">true</span>&lt;/<span class="code-key">enabled</span>&gt;
+    &lt;<span class="code-key">gps_enabled</span>&gt;<span class="code-val">true</span>&lt;/<span class="code-key">gps_enabled</span>&gt;
+    &lt;<span class="code-key">adsb_enabled</span>&gt;<span class="code-val">true</span>&lt;/<span class="code-key">adsb_enabled</span>&gt;
+    &lt;<span class="code-key">ais_enabled</span>&gt;<span class="code-val">true</span>&lt;/<span class="code-key">ais_enabled</span>&gt;
+    &lt;<span class="code-key">eas_enabled</span>&gt;<span class="code-val">true</span>&lt;/<span class="code-key">eas_enabled</span>&gt;
+    &lt;<span class="code-key">p25_rogue_enabled</span>&gt;<span class="code-val">true</span>&lt;/<span class="code-key">p25_rogue_enabled</span>&gt;
   &lt;/<span class="code-key">threat</span>&gt;
-&lt;/<span class="code-key">scanner</span>&gt;
+&lt;/<span class="code-key">sdr_acquisition</span>&gt;
 
 <span class="code-comment">&lt;!-- AnalysisApp/config/analysis.xml --&gt;</span>
 &lt;<span class="code-key">analysis</span>&gt;
@@ -418,7 +444,7 @@ sudo udevadm control --reload-rules</span></pre>
     <div class="step-num" style="background:var(--red)">!</div>
     <div class="step-body">
       <h3>PlutoSDR: sample drops at high rates</h3>
-      <p>PlutoSDR USB 2.0 limits sustained throughput to ~5 MS/s. At 61.44 MS/s the device overflows. Set <code>sample_rate</code> ≤ 4000000 in scanner.xml. Use a USB 3.0 hub — PlutoSDR still connects via USB 2.0 but avoids shared bandwidth with other USB 3.0 devices that can cause bus contention.</p>
+      <p>PlutoSDR with Ethernet firmware: connect via <code>ip:192.168.x.x</code> — no USB bandwidth limit, both RX channels run at full rate. For USB-only PlutoSDR: limit <code>sample_rate_sps</code> to 4000000 in scanner.xml. In containers use host networking (<code>--network host</code>) or fall back to <code>uri=usb:</code> as the IP driver may not route through container NAT.</p>
     </div>
   </div>
 
