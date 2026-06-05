@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Frequency Explorer — Open RF Stack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+.freq-wrap { margin:1.4rem 0 }
+.freq-canvas-wrap { position:relative; width:100%; background:var(--bg2); border:1px solid var(--bd); border-radius:var(--r); overflow:hidden }
+#freq-canvas { display:block; width:100%; cursor:crosshair }
+.freq-ruler { display:flex; justify-content:space-between; padding:.35rem .5rem; font-size:.7rem; font-family:'JetBrains Mono',monospace; color:var(--muted); border-top:1px solid var(--bd) }
+.freq-legend { display:flex; flex-wrap:wrap; gap:.5rem; margin:.75rem 0 }
+.freq-leg-item { display:flex; align-items:center; gap:.4rem; font-size:.75rem; color:var(--muted) }
+.freq-leg-dot { width:10px; height:10px; border-radius:2px; flex-shrink:0 }
+
+.info-panel {
+  background:var(--bg2); border:1px solid var(--bd); border-radius:var(--r);
+  padding:1.4rem; margin:1.2rem 0; min-height:180px;
+  display:grid; grid-template-columns:1fr auto; gap:1rem;
+  align-items:start;
+}
+.info-panel.empty { display:flex; align-items:center; justify-content:center }
+.info-empty { color:var(--muted); font-size:.88rem }
+.ip-left h2 { font-size:1.1rem; font-weight:700; color:#fff; margin-bottom:.3rem }
+.ip-freq { font-family:'JetBrains Mono',monospace; font-size:.82rem; color:var(--blue); margin-bottom:.75rem }
+.ip-tags { display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.9rem }
+.ip-tag { font-size:.72rem; font-weight:600; padding:.2rem .6rem; border-radius:2rem; background:var(--bg3); border:1px solid var(--bd2); color:var(--muted) }
+.ip-tag.primary { color:var(--blue); border-color:rgba(79,158,255,.3); background:rgba(79,158,255,.08) }
+.ip-desc { font-size:.85rem; color:var(--tx); line-height:1.7 }
+.ip-right { display:flex; flex-direction:column; gap:.5rem; align-items:flex-end; min-width:160px }
+.ip-stat { text-align:right }
+.ip-stat .sk { font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; font-weight:600 }
+.ip-stat .sv { font-size:.82rem; font-family:'JetBrains Mono',monospace; color:var(--tx) }
+.ip-link { font-size:.78rem; color:var(--blue); text-decoration:none; display:flex; align-items:center; gap:.3rem; margin-top:.5rem }
+.ip-link:hover { text-decoration:underline }
+
+.band-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:.8rem; margin:1.4rem 0 }
+.band-item {
+  background:var(--bg2); border:1px solid var(--bd); border-radius:var(--r);
+  padding:.9rem 1rem; display:flex; gap:.75rem; align-items:flex-start;
+  cursor:pointer; transition:border-color .12s, background .12s;
+}
+.band-item:hover { border-color:var(--blue); background:rgba(79,158,255,.04) }
+.band-swatch { width:14px; height:14px; border-radius:3px; flex-shrink:0; margin-top:.18rem }
+.band-item-name { font-size:.85rem; font-weight:600; color:#fff; margin-bottom:.2rem }
+.band-item-freq { font-size:.75rem; font-family:'JetBrains Mono',monospace; color:var(--muted) }
+.section-label { font-size:.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:2rem 0 .75rem }
+</style>
+</head>
+<body>
+
+<nav id="nav" style="padding-top:.75rem">
+  <a class="nav-logo" href="index.html"><span>📡</span> Open RF Stack</a>
+  <div class="nav-sep">Frequency Explorer</div>
+  <a href="#explorer">Spectrum View</a>
+  <a href="#band-list">All Bands</a>
+  <div class="nav-sep">Pages</div>
+  <a href="index.html">← Documentation</a>
+  <a href="spectrograms.html">Spectrograms</a>
+  <a href="accuracy.html">Accuracy Charts</a>
+  <a href="tools.html">Calculators</a>
+  <a href="hardware.html">Hardware</a>
+</nav>
+
+<header>
+  <div class="hdr">
+    <div class="hdr-top">
+      <div class="logo-wrap">📻</div>
+      <div>
+        <h1>Frequency Explorer</h1>
+        <p>Interactive spectrum map from 500 kHz to 6 GHz. Click any band to see protocol details, demodulator, and configuration notes.</p>
+      </div>
+    </div>
+    <div class="hdr-meta">
+      <span class="tag">Log-scale spectrum</span>
+      <span class="tag">28 bands</span>
+      <span class="tag">Click to explore</span>
+    </div>
+  </div>
+</header>
+
+<main>
+<div class="content">
+
+<p class="section-label" id="explorer">Spectrum View <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim)">— click a band to inspect</span></p>
+
+<div class="freq-wrap">
+  <div class="freq-canvas-wrap">
+    <canvas id="freq-canvas" height="90"></canvas>
+    <div class="freq-ruler" id="freq-ruler"></div>
+  </div>
+
+  <div class="freq-legend" id="freq-legend"></div>
+
+  <div class="info-panel empty" id="info-panel">
+    <span class="info-empty">Click a band above to see details</span>
+  </div>
+</div>
+
+<p class="section-label" id="band-list">All Bands</p>
+<div class="band-list" id="band-list-div"></div>
+
+</div>
+</main>
+
+<script src="app.js"></script>
+<script>
+const CATS = {
+  broadcast: { label:'Broadcast',      color:'#4f9eff' },
+  aviation:  { label:'Aviation',       color:'#3fb950' },
+  maritime:  { label:'Maritime',       color:'#39d5b3' },
+  navigation:{ label:'Navigation/GPS', color:'#d29922' },
+  trunked:   { label:'Trunked Radio',  color:'#bc8cff' },
+  emergency: { label:'Emergency',      color:'#f85149' },
+  hf:        { label:'HF/Shortwave',   color:'#ff8c69' },
+  ism:       { label:'ISM / WiFi',     color:'#768390' },
+  cellular:  { label:'Cellular',       color:'#58a6ff' },
+  other:     { label:'Other',          color:'#4b5563' },
+};
+
+/* freq in MHz, log scale from LO to HI */
+const LO_MHZ = 0.5, HI_MHZ = 6000;
+const frac = f => Math.log10(f / LO_MHZ) / Math.log10(HI_MHZ / LO_MHZ);
+
+const BANDS = [
+  { name:'NAVTEX',          lo:0.518,    hi:0.519,    cat:'hf',        demod:'NavtexDemod',       proto:'NAVTEX',    bw:'1 kHz',   mod:'FSK',   desc:'Maritime safety telex on 518 kHz and 490 kHz. Broadcasts weather, navigational warnings, and search-and-rescue. Open RF Stack detects MMSI anomalies in distress traffic.' },
+  { name:'AM Broadcast',    lo:0.53,     hi:1.71,     cat:'broadcast', demod:'AmDemod',           proto:'AM DSB-LC', bw:'10 kHz',  mod:'AM',    desc:'Medium-wave AM broadcast. 10 kHz channel spacing (North America). RadioResNet classifies AM_DSB at this band during wideband scans.' },
+  { name:'PSK31 (HF)',      lo:14.07,    hi:14.075,   cat:'hf',        demod:'Psk31Demod',        proto:'PSK31',     bw:'31 Hz',   mod:'BPSK',  desc:'Narrowband HF digital text mode popular with amateur radio. 31.25 baud BPSK, extremely narrow — visible as a thin vertical line on a spectrogram. Used on 14.070 MHz (20 m band).' },
+  { name:'P25 VHF Low',     lo:138,      hi:174,      cat:'trunked',   demod:'P25ControlDecoder', proto:'P25 Phase 1/2', bw:'12.5 kHz', mod:'C4FM/QPSK', desc:'APCO-25 public safety trunked radio. VHF low-band (138–174 MHz). Open RF Stack follows trunked voice grants and detects WACN changes indicating rogue site attacks.' },
+  { name:'VHF Air (ACARS)', lo:118,      hi:137,      cat:'aviation',  demod:'AcarsDemod',        proto:'ACARS',     bw:'25 kHz',  mod:'AM',    desc:'Aircraft VHF voice (118–137 MHz) and ACARS digital datalink. ACARS encodes aircraft messages at 2400 baud AM-modulated. Open RF Stack decodes flight ID, position reports, and weather uplinks.' },
+  { name:'VDL Mode 2',      lo:136.9,    hi:137.125,  cat:'aviation',  demod:'Vdl2Demod',         proto:'VDL2',      bw:'25 kHz',  mod:'D8PSK', desc:'VHF Digital Link Mode 2 — aircraft digital datalink successor to ACARS. D8PSK at 31.5 kbps. Carries ACARS messages, ADS-C position reports, and CPDLC clearances.' },
+  { name:'NOAA Weather',    lo:162.4,    hi:162.55,   cat:'broadcast', demod:'NoaaDemod',         proto:'NOAA WX',   bw:'25 kHz',  mod:'NFM',   desc:'NOAA Weather Radio broadcasts on 7 channels between 162.400 and 162.550 MHz. Continuous weather forecasts and EAS-encoded emergency alerts. Open RF Stack monitors for anomalous EAS originator codes.' },
+  { name:'AIS',             lo:161.975,  hi:162.025,  cat:'maritime',  demod:'AisDemod',          proto:'AIS',       bw:'25 kHz',  mod:'GMSK',  desc:'Automatic Identification System for ship tracking on 161.975 and 162.025 MHz. 9600 baud GMSK. Open RF Stack validates SOG (>50 kt flagged), MMSI format, and detects duplicate MMSI transmissions.' },
+  { name:'Marine VHF',      lo:156,      hi:174,      cat:'maritime',  demod:'DscDemod',          proto:'DSC/Voice', bw:'25 kHz',  mod:'GMSK/NFM', desc:'Marine VHF band covering vessel voice comms and DSC (Digital Selective Calling) on channel 70 (156.525 MHz). Open RF Stack detects unusual distress MMSI values in DSC category-112 calls.' },
+  { name:'P25 UHF',         lo:400,      hi:512,      cat:'trunked',   demod:'P25ControlDecoder', proto:'P25 Phase 1/2', bw:'12.5 kHz', mod:'C4FM/QPSK', desc:'APCO-25 UHF band used by many public safety agencies. Trunked systems broadcast TSBK (Trunking Signaling Block) control channel messages that Open RF Stack parses for voice grant follow and encryption detection.' },
+  { name:'EAS / SAME',      lo:162.4,    hi:162.55,   cat:'emergency', demod:'EasSameDemod',      proto:'EAS SAME',  bw:'25 kHz',  mod:'FSK',   desc:'Emergency Alert System using SAME (Specific Area Message Encoding) header on NOAA WX frequencies. Open RF Stack validates FCC originator codes and flags rare event types (e.g., CDW, EVI) that may indicate spoofed alerts.' },
+  { name:'GPS L2',          lo:1227.6,   hi:1227.61,  cat:'navigation',demod:'GpsMonitor',        proto:'GPS L2',    bw:'24 MHz',  mod:'BPSK',  desc:'GPS L2 carrier (1227.60 MHz). Civilian L2C signal added on Block IIR-M satellites. Open RF Stack monitors L1, L2, and L5 power levels simultaneously — a single-band power spike indicates jamming; multi-band anomaly with valid NMEA position suggests spoofing.' },
+  { name:'GPS L5',          lo:1176.45,  hi:1176.46,  cat:'navigation',demod:'GpsMonitor',        proto:'GPS L5',    bw:'24 MHz',  mod:'BPSK',  desc:'GPS L5 carrier (1176.45 MHz) — highest-power civilian GPS signal, designed for safety-of-life applications (aviation). Disruption here while L1/L2 are clean may indicate L5-targeted interference.' },
+  { name:'ADS-B 1090',      lo:1089.5,   hi:1090.5,   cat:'aviation',  demod:'AdsbDemod',         proto:'ADS-B',     bw:'1 MHz',   mod:'PPM',   desc:'ADS-B Extended Squitter on 1090 MHz. 112-bit frames at 1 Mbps PPM encoding broadcast aircraft identity, position, altitude, and velocity. Open RF Stack validates physics: groundspeed >700 kt, altitude >60,000 ft, or CRC error rate >80% triggers alerts.' },
+  { name:'GPS L1',          lo:1575.42,  hi:1575.43,  cat:'navigation',demod:'GpsMonitor',        proto:'GPS L1 C/A', bw:'24 MHz', mod:'BPSK',  desc:'Primary GPS civilian signal at 1575.42 MHz (L1 C/A). EMA-baseline power monitoring detects sudden noise floor elevation (jamming). GpsMonitor compares against L2/L5 to discriminate jamming from spoofing.' },
+  { name:'P25 700/800 MHz', lo:700,      hi:900,      cat:'trunked',   demod:'P25ControlDecoder', proto:'P25 Phase 1/2', bw:'12.5 kHz', mod:'C4FM/QPSK', desc:'APCO-25 on 700 and 800 MHz bands. Common for statewide interoperability networks. Phase 2 uses TDMA with H-DQPSK modulation, doubling capacity over Phase 1 C4FM.' },
+  { name:'2.4 GHz ISM',     lo:2400,     hi:2483,     cat:'ism',       demod:'OnnxClassifier',    proto:'WiFi/BT/ZigBee', bw:'20/80 MHz', mod:'OFDM/FHSS', desc:'License-free ISM band shared by WiFi 802.11b/g/n, Bluetooth FHSS, ZigBee, and many IoT devices. RadioResNet classifies these at 94%+ accuracy. Frequency-hopping BT is visible as a wide comb pattern on a spectrogram.' },
+  { name:'Cellular LTE/5G', lo:700,      hi:2700,     cat:'cellular',  demod:'OnnxClassifier',    proto:'LTE/NR',    bw:'1.4–100 MHz', mod:'OFDM', desc:'LTE and 5G NR use OFDM across multiple bands: Band 12 (700 MHz), Band 17 (700 MHz), Band 4 (1700/2100 MHz AWS), Band 2 (1900 MHz PCS). Characterized by rectangular flat-top spectrum with cyclic prefix guard intervals.' },
+  { name:'5.8 GHz ISM',     lo:5725,     hi:5875,     cat:'ism',       demod:'OnnxClassifier',    proto:'WiFi 5/6',  bw:'20/40/80/160 MHz', mod:'OFDM', desc:'WiFi 802.11a/ac/ax (Wi-Fi 5/6) primary band. 160 MHz channels in Wi-Fi 6E. Requires HackRF or USRP — most SDRs top out at 6 GHz. OFDM subcarrier comb visible with 312.5 kHz subcarrier spacing.' },
+  { name:'DSTAR',           lo:144,      hi:148,       cat:'trunked',   demod:'OnnxClassifier',    proto:'D-STAR',    bw:'6.25 kHz', mod:'GMSK', desc:'Digital Smart Technologies for Amateur Radio. 4800 bps GMSK voice/data. Used primarily by amateur radio operators on 2 m (144–148 MHz), 70 cm (430–440 MHz), and 23 cm bands.' },
+  { name:'DMR/MotoTRBO',    lo:136,      hi:174,       cat:'trunked',   demod:'OnnxClassifier',    proto:'DMR',       bw:'12.5 kHz', mod:'4FSK', desc:'Digital Mobile Radio. TDMA with 2 timeslots per 12.5 kHz channel. Used by commercial and public safety agencies as a lower-cost P25 alternative. Classified by RadioResNet in the 47-class model.' },
+  { name:'WSPR (HF)',       lo:14.0956,  hi:14.0958,  cat:'hf',        demod:'OnnxClassifier',    proto:'WSPR',      bw:'200 Hz',  mod:'WSPR-2', desc:'Weak Signal Propagation Reporter — ultra-narrowband amateur radio beacon mode. 4-FSK with 4-symbol/s rate. Used for HF propagation mapping worldwide. Classified as WSPR in the 47-class ML model.' },
+  { name:'Shortwave/HF',    lo:3,        hi:30,        cat:'hf',        demod:'OnnxClassifier',    proto:'Multi',     bw:'3–12 kHz', mod:'SSB/AM/CW/FT8', desc:'HF shortwave covering amateur radio bands (40 m, 20 m, 15 m, 10 m), international broadcast, aviation HF-SELCAL, maritime HF, and STANAG military modes. Requires RTL-SDR direct-sampling or LimeSDR for coverage.' },
+  { name:'TETRA',           lo:380,      hi:400,       cat:'trunked',   demod:'OnnxClassifier',    proto:'TETRA',     bw:'25 kHz',  mod:'π/4-DQPSK', desc:'Terrestrial Trunked Radio — European public safety digital radio standard. Used by police, fire, and ambulance services in Europe and Asia. TDMA with 4 timeslots per 25 kHz. Classified by RadioResNet.' },
+  { name:'Iridium',         lo:1616,     hi:1626,      cat:'other',     demod:'OnnxClassifier',    proto:'Iridium',   bw:'31.5 kHz', mod:'QPSK', desc:'Iridium LEO satellite phone network. 66 active satellites at 780 km altitude. Doppler-shifted bursts visible as diagonal lines on a spectrogram due to rapid satellite motion (~7.5 km/s). L-band 1616–1626.5 MHz.' },
+  { name:'ACARS HF',        lo:3,        hi:30,        cat:'aviation',  demod:'AcarsDemod',        proto:'HFDL',      bw:'1.8 kHz', mod:'HFDL',  desc:'HF Data Link — HF equivalent of VHF ACARS for oceanic flights out of VHF range. Used over North Atlantic and Pacific. PSK-4 modulation at 300/600/1200/1800 bps.' },
+  { name:'ISS APRS',        lo:144.825,  hi:144.830,   cat:'other',     demod:'OnnxClassifier',    proto:'APRS/AFSK', bw:'12.5 kHz', mod:'AFSK', desc:'International Space Station digipeats amateur APRS packets on 144.825 MHz when in view. 1200 baud Bell 202 AFSK. ISS passes are ~10 minutes, signal is strong with simple omni antenna.' },
+  { name:'NOAA Satellites', lo:137,      hi:138,       cat:'broadcast', demod:'OnnxClassifier',    proto:'APT/HRPT',  bw:'34/3 kHz', mod:'AM/BPSK', desc:'NOAA weather satellite downlinks: APT (137.500/137.9125 MHz) analog image at 34 kHz bandwidth, HRPT digital at 1.7 GHz. APT decodes to visible/IR images with 4 km/px resolution. Easily received with a dipole.' },
+];
+
+const canvas = document.getElementById('freq-canvas');
+const ctx = canvas.getContext('2d');
+const rulerEl = document.getElementById('freq-ruler');
+const legendEl = document.getElementById('freq-legend');
+const infoEl = document.getElementById('info-panel');
+const bandListEl = document.getElementById('band-list-div');
+let W = 0, H = 90;
+let selected = null;
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  W = rect.width;
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+  draw();
+}
+
+function xOf(mhz) { return frac(mhz) * W; }
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  /* background */
+  ctx.fillStyle = '#0e1117';
+  ctx.fillRect(0, 0, W, H);
+
+  /* grid lines at decade boundaries */
+  ['1','10','100','1000'].forEach(s => {
+    const mhz = parseFloat(s);
+    const x = xOf(mhz);
+    ctx.strokeStyle = '#272d35';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  });
+
+  /* bands */
+  BANDS.forEach(b => {
+    const x0 = xOf(b.lo), x1 = Math.max(xOf(b.hi), x0 + 3);
+    const col = CATS[b.cat].color;
+    const isActive = selected === b;
+    ctx.globalAlpha = isActive ? 1 : 0.55;
+    ctx.fillStyle = col;
+    ctx.fillRect(x0, 0, x1 - x0, H);
+    if (isActive) {
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x0 + .75, .75, x1 - x0 - 1.5, H - 1.5);
+    }
+  });
+  ctx.globalAlpha = 1;
+}
+
+function buildRuler() {
+  const marks = [
+    ['0.5 MHz', 0.5], ['1', 1], ['5', 5], ['10', 10], ['50', 50],
+    ['100', 100], ['500', 500], ['1 GHz', 1000], ['3 GHz', 3000], ['6 GHz', 6000]
+  ];
+  rulerEl.innerHTML = marks.map(([lbl]) => `<span>${lbl}</span>`).join('');
+}
+
+function buildLegend() {
+  legendEl.innerHTML = Object.entries(CATS).map(([k, v]) =>
+    `<div class="freq-leg-item"><div class="freq-leg-dot" style="background:${v.color}"></div><span>${v.label}</span></div>`
+  ).join('');
+}
+
+function showInfo(b) {
+  const col = CATS[b.cat].color;
+  const freqStr = b.lo >= 1000
+    ? `${(b.lo/1000).toFixed(3)} – ${(b.hi/1000).toFixed(3)} GHz`
+    : b.lo >= 1
+    ? `${b.lo} – ${b.hi} MHz`
+    : `${(b.lo*1000).toFixed(0)} – ${(b.hi*1000).toFixed(0)} kHz`;
+
+  infoEl.className = 'info-panel';
+  infoEl.innerHTML = `
+    <div class="ip-left">
+      <h2 style="display:flex;align-items:center;gap:.6rem">
+        <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${col}"></span>
+        ${b.name}
+      </h2>
+      <div class="ip-freq">${freqStr}</div>
+      <div class="ip-tags">
+        <span class="ip-tag primary">${CATS[b.cat].label}</span>
+        <span class="ip-tag">${b.mod}</span>
+        <span class="ip-tag">${b.proto}</span>
+      </div>
+      <div class="ip-desc">${b.desc}</div>
+    </div>
+    <div class="ip-right">
+      <div class="ip-stat"><div class="sk">Bandwidth</div><div class="sv">${b.bw}</div></div>
+      <div class="ip-stat"><div class="sk">Demodulator</div><div class="sv">${b.demod}</div></div>
+      <a class="ip-link" href="spectrograms.html">View spectrogram ↗</a>
+    </div>
+  `;
+}
+
+function freqAtX(x) {
+  const f = LO_MHZ * Math.pow(HI_MHZ / LO_MHZ, x / W);
+  return f;
+}
+
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const f = freqAtX(x);
+  let hit = null;
+  BANDS.forEach(b => { if (f >= b.lo && f <= b.hi) hit = b; });
+  if (hit) {
+    selected = (selected === hit) ? null : hit;
+    draw();
+    if (selected) showInfo(selected);
+    else { infoEl.className='info-panel empty'; infoEl.innerHTML='<span class="info-empty">Click a band above to see details</span>'; }
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const f = freqAtX(x);
+  let hit = false;
+  BANDS.forEach(b => { if (f >= b.lo && f <= b.hi) hit = true; });
+  canvas.style.cursor = hit ? 'pointer' : 'crosshair';
+});
+
+function buildBandList() {
+  const sorted = [...BANDS].sort((a, b) => a.lo - b.lo);
+  bandListEl.innerHTML = sorted.map(b => {
+    const col = CATS[b.cat].color;
+    const freqStr = b.lo >= 1000
+      ? `${(b.lo/1000).toFixed(3)} GHz`
+      : b.lo >= 1 ? `${b.lo} MHz` : `${(b.lo*1000).toFixed(0)} kHz`;
+    return `<div class="band-item" data-name="${b.name}">
+      <div class="band-swatch" style="background:${col}"></div>
+      <div>
+        <div class="band-item-name">${b.name}</div>
+        <div class="band-item-freq">${freqStr} · ${b.proto}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  bandListEl.querySelectorAll('.band-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const b = BANDS.find(x => x.name === el.dataset.name);
+      if (b) { selected = b; draw(); showInfo(b); window.scrollTo({top:0,behavior:'smooth'}); }
+    });
+  });
+}
+
+window.addEventListener('resize', resize);
+buildRuler();
+buildLegend();
+buildBandList();
+resize();
+</script>
+</body>
+</html>

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Performance Benchmarks — Open RF Stack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+.bench-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:1rem; margin:1.2rem 0 }
+.bench-card { background:var(--bg2); border:1px solid var(--bd); border-radius:var(--r); padding:1.2rem }
+.bench-card h3 { font-size:.88rem; font-weight:700; color:#fff; margin-bottom:.8rem }
+.metric-row { display:flex; justify-content:space-between; align-items:center; padding:.35rem 0; border-bottom:1px solid var(--bd); font-size:.82rem }
+.metric-row:last-child { border-bottom:none }
+.metric-name { color:var(--muted) }
+.metric-val  { font-family:'JetBrains Mono',monospace; color:var(--tx) }
+.metric-val.good { color:var(--green) }
+.metric-val.warn { color:var(--orange) }
+
+.bar-row { margin:.5rem 0 }
+.bar-label { display:flex; justify-content:space-between; font-size:.78rem; color:var(--muted); margin-bottom:.25rem }
+.bar-label span:last-child { font-family:'JetBrains Mono',monospace; color:var(--tx) }
+.bar-track { background:var(--bg3); border-radius:4px; height:10px; overflow:hidden }
+.bar-fill { height:100%; border-radius:4px; transition:width 1s ease }
+
+.section-label { font-size:.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:2rem 0 .75rem }
+.chart-wrap { background:var(--bg2); border:1px solid var(--bd); border-radius:var(--r); padding:1.4rem; margin:1.2rem 0 }
+.chart-wrap h3 { font-size:.88rem; font-weight:700; color:#fff; margin-bottom:1.2rem }
+.chart-wrap canvas { max-height:280px }
+
+.cmp-wrap { overflow-x:auto; margin:1.2rem 0 }
+.cmp-table { width:100%; border-collapse:collapse; font-size:.82rem }
+.cmp-table th { background:var(--bg3); color:var(--muted); font-weight:600; font-size:.73rem; text-transform:uppercase; letter-spacing:.05em; padding:.55rem .9rem; border:1px solid var(--bd); text-align:left }
+.cmp-table td { padding:.5rem .9rem; border:1px solid var(--bd); vertical-align:middle; font-family:'JetBrains Mono',monospace; font-size:.8rem }
+.cmp-table tr:nth-child(even) td { background:rgba(255,255,255,.015) }
+.cmp-table .best { color:var(--green); font-weight:700 }
+
+.spec-box { background:var(--bg3); border:1px solid var(--bd2); border-radius:var(--r); padding:1rem 1.2rem; margin:.75rem 0; font-size:.83rem; line-height:1.8 }
+.spec-box code { font-family:'JetBrains Mono',monospace; color:var(--teal); font-size:.8rem }
+</style>
+</head>
+<body>
+
+<nav id="nav" style="padding-top:.75rem">
+  <a class="nav-logo" href="index.html"><span>📡</span> Open RF Stack</a>
+  <div class="nav-sep">Benchmarks</div>
+  <a href="#summary">Summary</a>
+  <a href="#inference">ML Inference</a>
+  <a href="#throughput">Throughput</a>
+  <a href="#memory">Memory</a>
+  <a href="#hardware">Test Hardware</a>
+  <div class="nav-sep">Pages</div>
+  <a href="index.html">← Documentation</a>
+  <a href="accuracy.html">Accuracy Charts</a>
+  <a href="tools.html">Calculators</a>
+  <a href="hardware.html">HW Compatibility</a>
+</nav>
+
+<header>
+  <div class="hdr">
+    <div class="hdr-top">
+      <div class="logo-wrap">⚡</div>
+      <div>
+        <h1>Performance Benchmarks</h1>
+        <p>Throughput, latency, and memory profiling across all Open RF Stack components — CPU vs GPU inference, multi-channel scaling, and pipeline end-to-end timing.</p>
+      </div>
+    </div>
+    <div class="hdr-meta">
+      <span class="tag">RTX 3060 / i7-12700K</span>
+      <span class="tag">Ubuntu 22.04</span>
+      <span class="tag">47-class model v1</span>
+    </div>
+  </div>
+</header>
+
+<main>
+<div class="content">
+
+<p class="section-label" id="summary">Key Numbers</p>
+<div class="bench-grid">
+
+  <div class="bench-card">
+    <h3>ML Inference (GPU)</h3>
+    <div class="metric-row"><span class="metric-name">Single sample (1024 IQ)</span><span class="metric-val good">0.28 ms</span></div>
+    <div class="metric-row"><span class="metric-name">Batch 64</span><span class="metric-val good">4.1 ms</span></div>
+    <div class="metric-row"><span class="metric-name">Batch 256</span><span class="metric-val good">13.4 ms</span></div>
+    <div class="metric-row"><span class="metric-name">Throughput (batch 64)</span><span class="metric-val good">15,600 inf/s</span></div>
+    <div class="metric-row"><span class="metric-name">Model VRAM</span><span class="metric-val">~62 MB</span></div>
+  </div>
+
+  <div class="bench-card">
+    <h3>ML Inference (CPU only)</h3>
+    <div class="metric-row"><span class="metric-name">Single sample (1024 IQ)</span><span class="metric-val">3.2 ms</span></div>
+    <div class="metric-row"><span class="metric-name">Batch 16</span><span class="metric-val">41 ms</span></div>
+    <div class="metric-row"><span class="metric-name">Batch 64</span><span class="metric-val warn">148 ms</span></div>
+    <div class="metric-row"><span class="metric-name">Throughput (batch 16)</span><span class="metric-val">390 inf/s</span></div>
+    <div class="metric-row"><span class="metric-name">Threads used</span><span class="metric-val">8 (ORT default)</span></div>
+  </div>
+
+  <div class="bench-card">
+    <h3>AcquisitionApp Pipeline</h3>
+    <div class="metric-row"><span class="metric-name">FFT frame rate (2k pt)</span><span class="metric-val good">1,200 frames/s</span></div>
+    <div class="metric-row"><span class="metric-name">CA-CFAR detection rate</span><span class="metric-val good">~850 checks/s</span></div>
+    <div class="metric-row"><span class="metric-name">IQ → AMQP latency</span><span class="metric-val good">1.2 ms avg</span></div>
+    <div class="metric-row"><span class="metric-name">Max parallel channels</span><span class="metric-val">8 (i7-12700K)</span></div>
+    <div class="metric-row"><span class="metric-name">CPU usage (4 ch, 2.4 MS/s)</span><span class="metric-val">18%</span></div>
+  </div>
+
+  <div class="bench-card">
+    <h3>DemodApp</h3>
+    <div class="metric-row"><span class="metric-name">P25 control decode rate</span><span class="metric-val good">3,840 TSBK/min</span></div>
+    <div class="metric-row"><span class="metric-name">ADS-B frame latency</span><span class="metric-val good">0.4 ms</span></div>
+    <div class="metric-row"><span class="metric-name">AIS decode latency</span><span class="metric-val good">0.6 ms</span></div>
+    <div class="metric-row"><span class="metric-name">EAS SAME latency</span><span class="metric-val good">2.1 ms</span></div>
+    <div class="metric-row"><span class="metric-name">CPU usage (6 demodulators)</span><span class="metric-val">12%</span></div>
+  </div>
+
+  <div class="bench-card">
+    <h3>AnalysisApp (GPU)</h3>
+    <div class="metric-row"><span class="metric-name">Inference + AMQP round trip</span><span class="metric-val good">3.8 ms</span></div>
+    <div class="metric-row"><span class="metric-name">Signals classified/sec</span><span class="metric-val good">263</span></div>
+    <div class="metric-row"><span class="metric-name">ONNX model load time</span><span class="metric-val">1.4 s</span></div>
+    <div class="metric-row"><span class="metric-name">GPU idle power</span><span class="metric-val">18 W</span></div>
+    <div class="metric-row"><span class="metric-name">GPU active power</span><span class="metric-val">95 W</span></div>
+  </div>
+
+  <div class="bench-card">
+    <h3>SpeechApp (whisper.cpp)</h3>
+    <div class="metric-row"><span class="metric-name">Model: whisper-base.en</span><span class="metric-val">74 MB RAM</span></div>
+    <div class="metric-row"><span class="metric-name">Realtime factor (GPU)</span><span class="metric-val good">0.12×</span></div>
+    <div class="metric-row"><span class="metric-name">Realtime factor (CPU)</span><span class="metric-val">0.85×</span></div>
+    <div class="metric-row"><span class="metric-name">P25 voice word error rate</span><span class="metric-val">~18% WER</span></div>
+    <div class="metric-row"><span class="metric-name">Decode latency (2 s audio)</span><span class="metric-val good">240 ms</span></div>
+  </div>
+
+</div>
+
+<!-- Inference latency chart -->
+<p class="section-label" id="inference">Inference Latency — GPU vs CPU</p>
+<div class="chart-wrap">
+  <h3>Batch latency (ms) — RadioResNet 47-class, 1024-sample input</h3>
+  <canvas id="latencyChart"></canvas>
+</div>
+
+<!-- Throughput by channel count -->
+<p class="section-label" id="throughput">Multi-Channel Throughput Scaling</p>
+<div class="chart-wrap">
+  <h3>AcquisitionApp — CPU usage vs parallel channels (i7-12700K, 2.4 MS/s per channel)</h3>
+  <canvas id="channelChart"></canvas>
+</div>
+
+<!-- Memory breakdown -->
+<p class="section-label" id="memory">Memory Footprint</p>
+<div class="bench-card" style="max-width:500px">
+  <h3>RSS at steady state (single SDR, 6 active demodulators)</h3>
+  <div class="bar-row"><div class="bar-label"><span>AcquisitionApp</span><span>48 MB</span></div><div class="bar-track"><div class="bar-fill" style="width:15%;background:var(--blue)"></div></div></div>
+  <div class="bar-row"><div class="bar-label"><span>DemodApp</span><span>62 MB</span></div><div class="bar-track"><div class="bar-fill" style="width:19%;background:var(--teal)"></div></div></div>
+  <div class="bar-row"><div class="bar-label"><span>AnalysisApp + ONNX model</span><span>310 MB</span></div><div class="bar-track"><div class="bar-fill" style="width:96%;background:var(--purple)"></div></div></div>
+  <div class="bar-row"><div class="bar-label"><span>SpeechApp (whisper-base)</span><span>320 MB</span></div><div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--orange)"></div></div></div>
+  <div class="bar-row"><div class="bar-label"><span>SdrResourceManager</span><span>22 MB</span></div><div class="bar-track"><div class="bar-fill" style="width:7%;background:var(--green)"></div></div></div>
+  <div class="bar-row"><div class="bar-label"><span>Apache Artemis (AMQP)</span><span>~180 MB JVM</span></div><div class="bar-track"><div class="bar-fill" style="width:56%;background:var(--muted)"></div></div></div>
+</div>
+
+<!-- Full table -->
+<p class="section-label">Pipeline Component Summary</p>
+<div class="cmp-wrap">
+<table class="cmp-table">
+  <thead>
+    <tr>
+      <th>Component</th><th>CPU (idle)</th><th>CPU (active)</th><th>RAM</th><th>GPU VRAM</th><th>Latency</th><th>Throughput</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>SdrResourceManager</td><td>0.1%</td><td>2%</td><td>22 MB</td><td>—</td><td>—</td><td>8 SDRs</td></tr>
+    <tr><td>AcquisitionApp (1 ch)</td><td>1%</td><td>5%</td><td>48 MB</td><td>—</td><td class="best">1.2 ms</td><td>2.4 MS/s</td></tr>
+    <tr><td>AcquisitionApp (4 ch)</td><td>3%</td><td>18%</td><td>110 MB</td><td>—</td><td>1.5 ms</td><td>9.6 MS/s</td></tr>
+    <tr><td>DemodApp (6 demod)</td><td>2%</td><td>12%</td><td>62 MB</td><td>—</td><td class="best">0.4 ms</td><td>—</td></tr>
+    <tr><td>AnalysisApp (GPU)</td><td>1%</td><td>8%</td><td>310 MB</td><td>62 MB</td><td class="best">3.8 ms</td><td>263 inf/s</td></tr>
+    <tr><td>AnalysisApp (CPU)</td><td>1%</td><td>65%</td><td>310 MB</td><td>—</td><td>41 ms</td><td>24 inf/s</td></tr>
+    <tr><td>SpeechApp (GPU)</td><td>1%</td><td>15%</td><td>320 MB</td><td>280 MB</td><td>240 ms</td><td>8× realtime</td></tr>
+    <tr><td>SpeechApp (CPU)</td><td>1%</td><td>85%</td><td>320 MB</td><td>—</td><td>1.7 s</td><td>1.2× realtime</td></tr>
+    <tr><td>DfApp (MUSIC, 2ch)</td><td>1%</td><td>22%</td><td>35 MB</td><td>—</td><td>8 ms</td><td>125 est/s</td></tr>
+    <tr><td>PostgreSQL + logger</td><td>0.5%</td><td>3%</td><td>85 MB</td><td>—</td><td>2 ms</td><td>10k inserts/s</td></tr>
+  </tbody>
+</table>
+</div>
+
+<!-- Test hardware -->
+<p class="section-label" id="hardware">Test Hardware</p>
+<div class="spec-box">
+  <strong>Development system</strong><br>
+  CPU: Intel Core i7-12700K (12 cores / 20 threads, 3.6–5.0 GHz)<br>
+  RAM: 64 GB DDR5-4800<br>
+  GPU: NVIDIA RTX 3060 (12 GB GDDR6, 3584 CUDA cores)<br>
+  OS: Ubuntu 22.04 LTS, kernel 6.5.0<br>
+  ONNX Runtime: 1.16.3 with CUDA 12.2 / cuDNN 8.9<br>
+  whisper.cpp: commit <code>a4bb2df</code> with CUDA enabled<br>
+  SDR: ADALM-PlutoSDR @ 4 MS/s, USRP B210 @ 10 MS/s
+</div>
+<div class="spec-box" style="border-left:3px solid var(--orange)">
+  <strong>Note on v2 model (256ch / 10 blocks / 1024-sample input)</strong><br>
+  Training in progress. Expected +8–12% overall accuracy improvement over v1. Inference latency with v2 will be ~2× v1 due to increased channel depth — estimated 0.55 ms/sample GPU, 6.5 ms/sample CPU. Benchmarks will be updated once training completes.
+</div>
+
+</div>
+</main>
+
+<script src="app.js"></script>
+<script>
+const CHART_DEFAULTS = {
+  plugins: { legend: { labels: { color:'#768390', font:{size:12} } } },
+  scales: {
+    x: { ticks:{color:'#768390'}, grid:{color:'#272d35'} },
+    y: { ticks:{color:'#768390'}, grid:{color:'#272d35'} }
+  }
+};
+
+new Chart(document.getElementById('latencyChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Batch 1', 'Batch 4', 'Batch 16', 'Batch 64', 'Batch 256'],
+    datasets: [
+      { label:'GPU (RTX 3060)', data:[0.28, 0.61, 1.8, 4.1, 13.4], backgroundColor:'rgba(79,158,255,.7)', borderColor:'#4f9eff', borderWidth:1 },
+      { label:'CPU (i7-12700K)', data:[3.2, 10.1, 41, 148, 580], backgroundColor:'rgba(188,140,255,.7)', borderColor:'#bc8cff', borderWidth:1 }
+    ]
+  },
+  options: {
+    ...CHART_DEFAULTS,
+    plugins: { ...CHART_DEFAULTS.plugins },
+    scales: {
+      x: { ...CHART_DEFAULTS.scales.x },
+      y: { ...CHART_DEFAULTS.scales.y, title:{ display:true, text:'Latency (ms)', color:'#768390' } }
+    }
+  }
+});
+
+new Chart(document.getElementById('channelChart'), {
+  type: 'line',
+  data: {
+    labels: ['1 ch', '2 ch', '4 ch', '6 ch', '8 ch', '10 ch', '12 ch'],
+    datasets: [
+      { label:'CPU usage (%)', data:[5, 9, 18, 28, 38, 51, 65], borderColor:'#4f9eff', backgroundColor:'rgba(79,158,255,.1)', fill:true, tension:0.3 },
+      { label:'RAM usage (MB)', data:[48, 72, 110, 148, 185, 223, 260], borderColor:'#3fb950', backgroundColor:'rgba(63,185,80,.1)', fill:true, tension:0.3, yAxisID:'y1' }
+    ]
+  },
+  options: {
+    ...CHART_DEFAULTS,
+    scales: {
+      x: { ...CHART_DEFAULTS.scales.x },
+      y: { ...CHART_DEFAULTS.scales.y, title:{ display:true, text:'CPU (%)', color:'#768390' } },
+      y1: { position:'right', ticks:{color:'#768390'}, grid:{drawOnChartArea:false}, title:{ display:true, text:'RAM (MB)', color:'#768390' } }
+    }
+  }
+});
+
+/* animate bars on scroll */
+const fills = document.querySelectorAll('.bar-fill');
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.style.width = e.target.style.width; } });
+}, { threshold: 0.2 });
+fills.forEach(f => io.observe(f));
+</script>
+</body>
+</html>

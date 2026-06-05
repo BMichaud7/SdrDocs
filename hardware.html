@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Hardware Compatibility — Open RF Stack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+.hw-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:1.2rem; margin:1.4rem 0 }
+.hw-card {
+  background:var(--bg2); border:1px solid var(--bd); border-radius:var(--r);
+  padding:1.4rem; display:flex; flex-direction:column; gap:.9rem;
+  transition:border-color .15s;
+}
+.hw-card:hover { border-color:var(--blue) }
+.hw-card-top { display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem }
+.hw-name { font-size:1rem; font-weight:700; color:#fff }
+.hw-price { font-size:.8rem; font-family:'JetBrains Mono',monospace; color:var(--green); background:rgba(63,185,80,.1); border:1px solid rgba(63,185,80,.2); border-radius:4px; padding:.2rem .5rem; white-space:nowrap }
+.hw-badge { display:inline-flex; align-items:center; gap:.35rem; font-size:.72rem; font-weight:600; padding:.2rem .6rem; border-radius:2rem; margin-top:.15rem }
+.badge-tested  { background:rgba(63,185,80,.12);  color:var(--green);  border:1px solid rgba(63,185,80,.25)  }
+.badge-compat  { background:rgba(79,158,255,.12); color:var(--blue);   border:1px solid rgba(79,158,255,.25) }
+.badge-untested{ background:rgba(118,131,144,.1); color:var(--muted);  border:1px solid var(--bd2) }
+.hw-specs { display:grid; grid-template-columns:1fr 1fr; gap:.4rem .75rem }
+.hw-spec { font-size:.8rem }
+.hw-spec .sk { color:var(--muted); }
+.hw-spec .sv { color:var(--tx);   font-family:'JetBrains Mono',monospace; font-size:.78rem }
+.hw-driver { font-size:.78rem; color:var(--muted); font-family:'JetBrains Mono',monospace; background:var(--bg3); border:1px solid var(--bd2); border-radius:4px; padding:.25rem .6rem; margin-top:.1rem; width:fit-content }
+.hw-note { font-size:.8rem; color:var(--muted); border-top:1px solid var(--bd); padding-top:.8rem; line-height:1.6 }
+.hw-note strong { color:var(--tx) }
+
+.cmp-wrap { overflow-x:auto; margin:1.4rem 0 }
+.cmp-table { width:100%; border-collapse:collapse; font-size:.82rem; white-space:nowrap }
+.cmp-table th { background:var(--bg3); color:var(--muted); font-weight:600; font-size:.73rem; text-transform:uppercase; letter-spacing:.05em; padding:.55rem .9rem; border:1px solid var(--bd); text-align:left }
+.cmp-table td { padding:.5rem .9rem; border:1px solid var(--bd); vertical-align:middle }
+.cmp-table tr:nth-child(even) td { background:rgba(255,255,255,.015) }
+.cmp-table tr:hover td { background:rgba(79,158,255,.04) }
+.tick  { color:var(--green) }
+.cross { color:var(--red)   }
+.dash  { color:var(--muted) }
+
+.section-label { font-size:.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:2rem 0 .75rem }
+.tip-box { background:var(--bg3); border:1px solid var(--bd2); border-left:3px solid var(--blue); border-radius:var(--r); padding:1rem 1.2rem; margin:1.2rem 0; font-size:.88rem; line-height:1.7 }
+.tip-box strong { color:#fff }
+</style>
+</head>
+<body>
+
+<nav id="nav" style="padding-top:.75rem">
+  <a class="nav-logo" href="index.html"><span>📡</span> Open RF Stack</a>
+  <div class="nav-sep">Hardware</div>
+  <a href="#cards">Device Profiles</a>
+  <a href="#comparison">Comparison Table</a>
+  <a href="#selection">Selection Guide</a>
+  <a href="#config">Config Snippets</a>
+  <div class="nav-sep">Pages</div>
+  <a href="index.html">← Documentation</a>
+  <a href="spectrograms.html">Spectrograms</a>
+  <a href="accuracy.html">Accuracy Charts</a>
+  <a href="tools.html">Calculators</a>
+  <a href="frequency.html">Frequency Explorer</a>
+</nav>
+
+<header>
+  <div class="hdr">
+    <div class="hdr-top">
+      <div class="logo-wrap">🔌</div>
+      <div>
+        <h1>Hardware Compatibility</h1>
+        <p>Tested and compatible SDR devices for Open RF Stack — frequency ranges, sample rates, ADC resolution, and known quirks.</p>
+      </div>
+    </div>
+    <div class="hdr-meta">
+      <span class="tag">SoapySDR abstraction</span>
+      <span class="tag">6 devices profiled</span>
+      <span class="tag">2 hardware-tested</span>
+    </div>
+  </div>
+</header>
+
+<main>
+<div class="content">
+
+<p class="section-label" id="cards">Device Profiles</p>
+
+<div class="hw-grid">
+
+  <!-- RTL-SDR Blog v3 -->
+  <div class="hw-card">
+    <div class="hw-card-top">
+      <div>
+        <div class="hw-name">RTL-SDR Blog v3</div>
+        <div class="hw-badge badge-compat">&#10003; Compatible</div>
+      </div>
+      <span class="hw-price">~$30</span>
+    </div>
+    <div class="hw-specs">
+      <div class="hw-spec"><span class="sk">Frequency</span><br><span class="sv">500 kHz – 1.766 GHz</span></div>
+      <div class="hw-spec"><span class="sk">Max sample rate</span><br><span class="sv">2.4 MS/s</span></div>
+      <div class="hw-spec"><span class="sk">ADC resolution</span><br><span class="sv">8-bit</span></div>
+      <div class="hw-spec"><span class="sk">Full duplex</span><br><span class="sv cross">✗ Rx only</span></div>
+      <div class="hw-spec"><span class="sk">SoapySDR driver</span><br><span class="sv">SoapyRTLSDR</span></div>
+      <div class="hw-spec"><span class="sk">Simultaneous ch</span><br><span class="sv">1 Rx</span></div>
+    </div>
+    <div class="hw-driver">SoapySDRUtil --find="driver=rtlsdr"</div>
+    <div class="hw-note"><strong>Best for:</strong> entry-level monitoring, FM/ADS-B/AIS/NOAA. 8-bit limits dynamic range to ~48 dB — avoid strong adjacent signals. Direct sampling mode extends HF coverage to 500 kHz. No TX capability.</div>
+  </div>
+
+  <!-- RTL-SDR Blog v4 -->
+  <div class="hw-card">
+    <div class="hw-card-top">
+      <div>
+        <div class="hw-name">RTL-SDR Blog v4</div>
+        <div class="hw-badge badge-compat">&#10003; Compatible</div>
+      </div>
+      <span class="hw-price">~$40</span>
+    </div>
+    <div class="hw-specs">
+      <div class="hw-spec"><span class="sk">Frequency</span><br><span class="sv">500 kHz – 1.766 GHz</span></div>
+      <div class="hw-spec"><span class="sk">Max sample rate</span><br><span class="sv">3.2 MS/s</span></div>
+      <div class="hw-spec"><span class="sk">ADC resolution</span><br><span class="sv">8-bit</span></div>
+      <div class="hw-spec"><span class="sk">Full duplex</span><br><span class="sv cross">✗ Rx only</span></div>
+      <div class="hw-spec"><span class="sk">SoapySDR driver</span><br><span class="sv">SoapyRTLSDR</span></div>
+      <div class="hw-spec"><span class="sk">Simultaneous ch</span><br><span class="sv">1 Rx</span></div>
+    </div>
+    <div class="hw-driver">SoapySDRUtil --find="driver=rtlsdr"</div>
+    <div class="hw-note"><strong>Upgrade over v3:</strong> integrated LNA improves sensitivity by ~3–5 dB. HF direct sampling up to 3.2 MS/s. Better thermal stability. Requires driver version ≥ 0.6.0. Bias tee built in for powered antennas.</div>
+  </div>
+
+  <!-- PlutoSDR -->
+  <div class="hw-card">
+    <div class="hw-card-top">
+      <div>
+        <div class="hw-name">ADALM-PlutoSDR</div>
+        <div class="hw-badge badge-tested">&#9733; Hardware tested</div>
+      </div>
+      <span class="hw-price">~$250</span>
+    </div>
+    <div class="hw-specs">
+      <div class="hw-spec"><span class="sk">Frequency</span><br><span class="sv">325 MHz – 3.8 GHz</span></div>
+      <div class="hw-spec"><span class="sk">Max sample rate</span><br><span class="sv">61.44 MS/s</span></div>
+      <div class="hw-spec"><span class="sk">ADC resolution</span><br><span class="sv">12-bit</span></div>
+      <div class="hw-spec"><span class="sk">Full duplex</span><br><span class="sv tick">✓ Tx + Rx</span></div>
+      <div class="hw-spec"><span class="sk">SoapySDR driver</span><br><span class="sv">SoapyPlutoSDR</span></div>
+      <div class="hw-spec"><span class="sk">Simultaneous ch</span><br><span class="sv">1 Tx + 1 Rx</span></div>
+    </div>
+    <div class="hw-driver">SoapySDRUtil --find="driver=plutosdr"</div>
+    <div class="hw-note"><strong>Hardware tested</strong> with SdrResourceManager in the CI hardware test suite. Race condition in SharedLo arbitration was caught during PlutoSDR testing. Practical frequency range extended to 70 MHz – 6 GHz via firmware hack. USB 2.0 limits sustained throughput to ~5 MS/s in practice.</div>
+  </div>
+
+  <!-- LimeSDR Mini 2 -->
+  <div class="hw-card">
+    <div class="hw-card-top">
+      <div>
+        <div class="hw-name">LimeSDR Mini 2</div>
+        <div class="hw-badge badge-compat">&#10003; Compatible</div>
+      </div>
+      <span class="hw-price">~$300</span>
+    </div>
+    <div class="hw-specs">
+      <div class="hw-spec"><span class="sk">Frequency</span><br><span class="sv">10 MHz – 3.5 GHz</span></div>
+      <div class="hw-spec"><span class="sk">Max sample rate</span><br><span class="sv">30.72 MS/s</span></div>
+      <div class="hw-spec"><span class="sk">ADC resolution</span><br><span class="sv">12-bit</span></div>
+      <div class="hw-spec"><span class="sk">Full duplex</span><br><span class="sv tick">✓ Tx + Rx</span></div>
+      <div class="hw-spec"><span class="sk">SoapySDR driver</span><br><span class="sv">SoapyLMS7</span></div>
+      <div class="hw-spec"><span class="sk">Simultaneous ch</span><br><span class="sv">1 Tx + 1 Rx</span></div>
+    </div>
+    <div class="hw-driver">SoapySDRUtil --find="driver=lime"</div>
+    <div class="hw-note"><strong>Best mid-range option:</strong> 12-bit ADC gives 72 dB dynamic range. Good HF coverage from 10 MHz (PSK31, NAVTEX). USB 3.0. Known issue: LimeSuite firmware must be flashed before first use; old firmware causes sample drops at high rates.</div>
+  </div>
+
+  <!-- HackRF One -->
+  <div class="hw-card">
+    <div class="hw-card-top">
+      <div>
+        <div class="hw-name">HackRF One</div>
+        <div class="hw-badge badge-compat">&#10003; Compatible</div>
+      </div>
+      <span class="hw-price">~$340</span>
+    </div>
+    <div class="hw-specs">
+      <div class="hw-spec"><span class="sk">Frequency</span><br><span class="sv">1 MHz – 6 GHz</span></div>
+      <div class="hw-spec"><span class="sk">Max sample rate</span><br><span class="sv">20 MS/s</span></div>
+      <div class="hw-spec"><span class="sk">ADC resolution</span><br><span class="sv">8-bit</span></div>
+      <div class="hw-spec"><span class="sk">Full duplex</span><br><span class="sv cross">✗ Half duplex</span></div>
+      <div class="hw-spec"><span class="sk">SoapySDR driver</span><br><span class="sv">SoapyHackRF</span></div>
+      <div class="hw-spec"><span class="sk">Simultaneous ch</span><br><span class="sv">1 Tx OR 1 Rx</span></div>
+    </div>
+    <div class="hw-driver">SoapySDRUtil --find="driver=hackrf"</div>
+    <div class="hw-note"><strong>Widest frequency coverage</strong> in its class. 8-bit ADC limits SNR — not suitable for weak-signal work. Half-duplex only (cannot Tx and Rx simultaneously). Best for wideband sweeps and protocol research where dynamic range is not critical.</div>
+  </div>
+
+  <!-- USRP B210 -->
+  <div class="hw-card">
+    <div class="hw-card-top">
+      <div>
+        <div class="hw-name">USRP B210</div>
+        <div class="hw-badge badge-tested">&#9733; Hardware tested</div>
+      </div>
+      <span class="hw-price">~$2,100</span>
+    </div>
+    <div class="hw-specs">
+      <div class="hw-spec"><span class="sk">Frequency</span><br><span class="sv">70 MHz – 6 GHz</span></div>
+      <div class="hw-spec"><span class="sk">Max sample rate</span><br><span class="sv">61.44 MS/s</span></div>
+      <div class="hw-spec"><span class="sk">ADC resolution</span><br><span class="sv">12-bit</span></div>
+      <div class="hw-spec"><span class="sk">Full duplex</span><br><span class="sv tick">✓ 2 Tx + 2 Rx</span></div>
+      <div class="hw-spec"><span class="sk">SoapySDR driver</span><br><span class="sv">SoapyUHD</span></div>
+      <div class="hw-spec"><span class="sk">Simultaneous ch</span><br><span class="sv">2 Tx + 2 Rx</span></div>
+    </div>
+    <div class="hw-driver">SoapySDRUtil --find="driver=uhd"</div>
+    <div class="hw-note"><strong>Production-grade device.</strong> Two independent Rx channels enable MUSIC direction-finding without a second device. 61.44 MS/s via USB 3.0. Coherent dual-channel operation for DF requires synchronized LO — use internal reference. CI hardware tests run on B210 in the IndepLo and SharedLo categories.</div>
+  </div>
+
+</div>
+
+<!-- Comparison table -->
+<p class="section-label" id="comparison">Full Comparison</p>
+<div class="cmp-wrap">
+<table class="cmp-table">
+  <thead>
+    <tr>
+      <th>Device</th>
+      <th>Price</th>
+      <th>Freq range</th>
+      <th>Max SR</th>
+      <th>ADC bits</th>
+      <th>Duplex</th>
+      <th>Channels</th>
+      <th>Dynamic range</th>
+      <th>Interface</th>
+      <th>HW tested</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>RTL-SDR v3</strong></td>
+      <td>$30</td>
+      <td>0.5 MHz–1.77 GHz</td>
+      <td>2.4 MS/s</td>
+      <td>8</td>
+      <td>Rx only</td>
+      <td>1 Rx</td>
+      <td>~48 dB</td>
+      <td>USB 2.0</td>
+      <td><span class="cross">✗</span></td>
+    </tr>
+    <tr>
+      <td><strong>RTL-SDR v4</strong></td>
+      <td>$40</td>
+      <td>0.5 MHz–1.77 GHz</td>
+      <td>3.2 MS/s</td>
+      <td>8</td>
+      <td>Rx only</td>
+      <td>1 Rx</td>
+      <td>~50 dB</td>
+      <td>USB 2.0</td>
+      <td><span class="cross">✗</span></td>
+    </tr>
+    <tr>
+      <td><strong>PlutoSDR</strong></td>
+      <td>$250</td>
+      <td>325 MHz–3.8 GHz</td>
+      <td>61.44 MS/s</td>
+      <td>12</td>
+      <td>Full</td>
+      <td>1T+1R</td>
+      <td>~72 dB</td>
+      <td>USB 2.0</td>
+      <td><span class="tick">✓</span></td>
+    </tr>
+    <tr>
+      <td><strong>LimeSDR Mini 2</strong></td>
+      <td>$300</td>
+      <td>10 MHz–3.5 GHz</td>
+      <td>30.72 MS/s</td>
+      <td>12</td>
+      <td>Full</td>
+      <td>1T+1R</td>
+      <td>~72 dB</td>
+      <td>USB 3.0</td>
+      <td><span class="cross">✗</span></td>
+    </tr>
+    <tr>
+      <td><strong>HackRF One</strong></td>
+      <td>$340</td>
+      <td>1 MHz–6 GHz</td>
+      <td>20 MS/s</td>
+      <td>8</td>
+      <td>Half</td>
+      <td>1T or 1R</td>
+      <td>~48 dB</td>
+      <td>USB 2.0</td>
+      <td><span class="cross">✗</span></td>
+    </tr>
+    <tr>
+      <td><strong>USRP B210</strong></td>
+      <td>$2,100</td>
+      <td>70 MHz–6 GHz</td>
+      <td>61.44 MS/s</td>
+      <td>12</td>
+      <td>Full</td>
+      <td>2T+2R</td>
+      <td>~72 dB</td>
+      <td>USB 3.0</td>
+      <td><span class="tick">✓</span></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- Selection guide -->
+<p class="section-label" id="selection">Selection Guide</p>
+
+<div class="tip-box">
+  <strong>Just getting started / ADS-B, FM, AIS, NOAA</strong><br>
+  RTL-SDR Blog v4 ($40). Limited to 1.77 GHz, 8-bit ADC, but covers 90% of common monitoring targets cheaply. Stack multiple dongles for parallel channels.
+</div>
+
+<div class="tip-box">
+  <strong>Multi-protocol monitoring, P25, GPS, cellular</strong><br>
+  PlutoSDR ($250) or LimeSDR Mini 2 ($300). 12-bit ADC, full duplex, coverage up to 3.5–3.8 GHz. PlutoSDR has a larger SoapySDR community; LimeSDR covers down to 10 MHz for HF protocols.
+</div>
+
+<div class="tip-box">
+  <strong>Direction finding (MUSIC algorithm)</strong><br>
+  USRP B210 ($2,100). Only device in this list with two coherent Rx channels required for phase-based DF. Alternatively, use two synchronized PlutoSDRs with external 10 MHz reference — contact the OpenRFStack team for the dual-device DF configuration.
+</div>
+
+<div class="tip-box">
+  <strong>Full 6 GHz coverage, protocol research</strong><br>
+  HackRF One ($340). Widest frequency range, but 8-bit and half-duplex. Not suitable for simultaneous Tx/Rx or weak-signal classification — use for survey sweeps and initial protocol identification.
+</div>
+
+<!-- Config snippets -->
+<p class="section-label" id="config">scanner.xml Snippets</p>
+
+<div class="hw-note" style="background:var(--bg3);border:1px solid var(--bd2);border-radius:var(--r);padding:1.2rem;margin:.5rem 0">
+<pre style="font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--tx);white-space:pre-wrap;line-height:1.7">&lt;!-- RTL-SDR --&gt;
+&lt;sdr driver="rtlsdr" serial="00000001" sample_rate="2400000" gain="30" /&gt;
+
+&lt;!-- PlutoSDR --&gt;
+&lt;sdr driver="plutosdr" uri="usb:1.2.5" sample_rate="4000000" gain="50" /&gt;
+
+&lt;!-- LimeSDR Mini 2 --&gt;
+&lt;sdr driver="lime" serial="0009072C028A2F" sample_rate="10000000" gain="40" /&gt;
+
+&lt;!-- HackRF One --&gt;
+&lt;sdr driver="hackrf" serial="0000000000000000b06f7051" sample_rate="10000000" gain="40" /&gt;
+
+&lt;!-- USRP B210 (dual channel DF) --&gt;
+&lt;sdr driver="uhd" args="type=b200" sample_rate="10000000" gain="40" channels="0,1" /&gt;</pre>
+</div>
+
+</div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

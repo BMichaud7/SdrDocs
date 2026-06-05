@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Deployment Guide — Open RF Stack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+.step-list { counter-reset: step; display:flex; flex-direction:column; gap:1.6rem; margin:1.2rem 0 }
+.step { display:grid; grid-template-columns:2rem 1fr; gap:1rem; align-items:start }
+.step-num {
+  width:2rem; height:2rem; border-radius:50%; background:var(--blue2);
+  color:#fff; font-weight:700; font-size:.82rem;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  margin-top:.1rem;
+}
+.step-body h3 { font-size:.95rem; font-weight:700; color:#fff; margin-bottom:.5rem }
+.step-body p { font-size:.85rem; color:var(--muted); line-height:1.7; margin-bottom:.6rem }
+
+pre.code-block {
+  background:var(--bg3); border:1px solid var(--bd2); border-radius:var(--r);
+  padding:.9rem 1.1rem; font-family:'JetBrains Mono',monospace; font-size:.78rem;
+  color:var(--tx); overflow-x:auto; white-space:pre; line-height:1.75; margin:.5rem 0;
+}
+.code-comment { color:var(--muted) }
+.code-key { color:var(--blue) }
+.code-val { color:var(--green) }
+.code-cmd { color:var(--teal) }
+.code-hl  { color:var(--orange) }
+
+.arch-diagram {
+  background:var(--bg2); border:1px solid var(--bd); border-radius:var(--r);
+  padding:1.4rem; margin:1.2rem 0; overflow-x:auto;
+}
+.arch-diagram pre { font-family:'JetBrains Mono',monospace; font-size:.77rem; color:var(--tx); line-height:1.6; white-space:pre }
+
+.note-box { background:var(--bg3); border:1px solid var(--bd2); border-left:3px solid var(--blue); border-radius:var(--r); padding:.9rem 1.1rem; font-size:.85rem; line-height:1.7; margin:.75rem 0 }
+.warn-box { background:rgba(210,153,34,.07); border:1px solid rgba(210,153,34,.25); border-left:3px solid var(--orange); border-radius:var(--r); padding:.9rem 1.1rem; font-size:.85rem; line-height:1.7; margin:.75rem 0 }
+.note-box strong, .warn-box strong { color:#fff }
+
+.section-label { font-size:.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:2rem 0 .75rem }
+.dep-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:.75rem; margin:1rem 0 }
+.dep-item { background:var(--bg2); border:1px solid var(--bd); border-radius:6px; padding:.75rem 1rem; font-size:.83rem }
+.dep-item .dn { font-weight:700; color:#fff; margin-bottom:.25rem }
+.dep-item .dv { font-family:'JetBrains Mono',monospace; color:var(--green); font-size:.78rem }
+.dep-item .dp { color:var(--muted); font-size:.75rem; margin-top:.2rem }
+.tab-row { display:flex; gap:.4rem; margin-bottom:.75rem; flex-wrap:wrap }
+.tab-btn { padding:.3rem .9rem; border-radius:2rem; font-size:.78rem; font-weight:600; cursor:pointer; background:var(--bg3); border:1px solid var(--bd2); color:var(--muted); transition:all .12s }
+.tab-btn.active { background:var(--blue); border-color:var(--blue); color:#fff }
+.tab-pane { display:none }
+.tab-pane.active { display:block }
+</style>
+</head>
+<body>
+
+<nav id="nav" style="padding-top:.75rem">
+  <a class="nav-logo" href="index.html"><span>📡</span> Open RF Stack</a>
+  <div class="nav-sep">Deployment Guide</div>
+  <a href="#prereqs">Prerequisites</a>
+  <a href="#docker">Docker Compose</a>
+  <a href="#k8s">Kubernetes</a>
+  <a href="#config">Configuration</a>
+  <a href="#common-issues">Common Issues</a>
+  <div class="nav-sep">Pages</div>
+  <a href="index.html">← Documentation</a>
+  <a href="hardware.html">Hardware Compat</a>
+  <a href="tools.html">Calculators</a>
+</nav>
+
+<header>
+  <div class="hdr">
+    <div class="hdr-top">
+      <div class="logo-wrap">🚀</div>
+      <div>
+        <h1>Deployment Guide</h1>
+        <p>Step-by-step setup for Open RF Stack from bare metal to Docker Compose to Kubernetes — including SDR USB passthrough, AMQP broker, PostgreSQL, and GPU access.</p>
+      </div>
+    </div>
+    <div class="hdr-meta">
+      <span class="tag">Docker Compose</span>
+      <span class="tag">Kubernetes / k3s</span>
+      <span class="tag">Ubuntu 22.04</span>
+    </div>
+  </div>
+</header>
+
+<main>
+<div class="content">
+
+<!-- Architecture -->
+<p class="section-label">System Architecture</p>
+<div class="arch-diagram">
+<pre>
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │                        Open RF Stack                                 │
+  │                                                                      │
+  │  USB SDR ──► SdrResourceManager ──► AcquisitionApp ─────────────┐   │
+  │                                                                  │   │
+  │                                           Apache Artemis (AMQP) ◄┤   │
+  │                                                                  │   │
+  │       ┌─────────── AnalysisApp (ONNX GPU) ◄──────────────────────┤   │
+  │       │                                                          │   │
+  │       ├─────────── DemodApp ◄────────────────────────────────────┤   │
+  │       │            (P25/ADS-B/AIS/EAS/DSC/ACARS/VDL2)           │   │
+  │       │                                                          │   │
+  │       ├─────────── SpeechApp (whisper.cpp) ◄────────────────────-┘   │
+  │       │                                                              │
+  │       └─────────── PostgreSQL ◄── signal_logger                      │
+  │                       │                                              │
+  │                    Grafana / pgAdmin                                 │
+  └──────────────────────────────────────────────────────────────────────┘
+</pre>
+</div>
+
+<!-- Prerequisites -->
+<p class="section-label" id="prereqs">Prerequisites</p>
+<div class="dep-grid">
+  <div class="dep-item"><div class="dn">Docker</div><div class="dv">≥ 24.0</div><div class="dp">Container runtime</div></div>
+  <div class="dep-item"><div class="dn">Docker Compose</div><div class="dv">≥ 2.20</div><div class="dp">Multi-container orchestration</div></div>
+  <div class="dep-item"><div class="dn">NVIDIA drivers</div><div class="dv">≥ 525</div><div class="dp">For AnalysisApp GPU inference</div></div>
+  <div class="dep-item"><div class="dn">nvidia-container-toolkit</div><div class="dv">≥ 1.14</div><div class="dp">GPU passthrough to containers</div></div>
+  <div class="dep-item"><div class="dn">SoapySDR</div><div class="dv">≥ 0.8</div><div class="dp">SDR hardware abstraction</div></div>
+  <div class="dep-item"><div class="dn">libqpid-proton</div><div class="dv">≥ 0.38</div><div class="dp">AMQP 1.0 C++ client</div></div>
+  <div class="dep-item"><div class="dn">ONNX Runtime</div><div class="dv">≥ 1.16</div><div class="dp">Model inference</div></div>
+  <div class="dep-item"><div class="dn">PostgreSQL</div><div class="dv">≥ 15</div><div class="dp">Alert and signal storage</div></div>
+</div>
+
+<pre class="code-block"><span class="code-comment"># Install NVIDIA container toolkit (Ubuntu 22.04)</span>
+<span class="code-cmd">curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor \
+  -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg</span>
+<span class="code-cmd">sudo apt-get install -y nvidia-container-toolkit</span>
+<span class="code-cmd">sudo nvidia-ctk runtime configure --runtime=docker</span>
+<span class="code-cmd">sudo systemctl restart docker</span>
+
+<span class="code-comment"># Verify GPU is accessible from Docker</span>
+<span class="code-cmd">docker run --rm --gpus all nvidia/cuda:12.2-base-ubuntu22.04 nvidia-smi</span></pre>
+
+<!-- Docker Compose -->
+<p class="section-label" id="docker">Docker Compose Setup</p>
+<div class="step-list">
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <h3>Clone all repositories</h3>
+      <p>All repos must be siblings — the build system uses relative paths (<code>../SdrSdk</code>, <code>../SdrTaskApi</code>).</p>
+<pre class="code-block"><span class="code-cmd">mkdir openrfstack && cd openrfstack</span>
+<span class="code-cmd">for repo in SdrSdk SdrTaskApi SdrResourceManager AcquisitionApp \
+            DemodApp AnalysisApp SpeechApp SdrScripts; do
+  git clone --branch main/1.0 https://github.com/OpenRFStack/$repo.git
+done</span></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <h3>Configure environment variables</h3>
+<pre class="code-block"><span class="code-comment"># .env — place next to docker-compose.yml</span>
+<span class="code-key">AMQP_HOST</span>=<span class="code-val">artemis</span>
+<span class="code-key">AMQP_PORT</span>=<span class="code-val">5672</span>
+<span class="code-key">AMQP_USER</span>=<span class="code-val">openrf</span>
+<span class="code-key">AMQP_PASS</span>=<span class="code-val">changeme</span>
+<span class="code-key">POSTGRES_USER</span>=<span class="code-val">openrf</span>
+<span class="code-key">POSTGRES_PASSWORD</span>=<span class="code-val">changeme</span>
+<span class="code-key">POSTGRES_DB</span>=<span class="code-val">openrfstack</span>
+<span class="code-key">MODEL_PATH</span>=<span class="code-val">/models/amr_cnn_v1_47class.onnx</span></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <h3>docker-compose.yml</h3>
+<pre class="code-block"><span class="code-key">services</span>:
+
+  <span class="code-key">artemis</span>:
+    <span class="code-key">image</span>: <span class="code-val">apache/activemq-artemis:2.31.2</span>
+    <span class="code-key">environment</span>:
+      ARTEMIS_USER: <span class="code-val">${AMQP_USER}</span>
+      ARTEMIS_PASSWORD: <span class="code-val">${AMQP_PASS}</span>
+    <span class="code-key">ports</span>: [<span class="code-val">"5672:5672"</span>, <span class="code-val">"8161:8161"</span>]
+
+  <span class="code-key">postgres</span>:
+    <span class="code-key">image</span>: <span class="code-val">postgres:15-alpine</span>
+    <span class="code-key">environment</span>:
+      POSTGRES_USER: <span class="code-val">${POSTGRES_USER}</span>
+      POSTGRES_PASSWORD: <span class="code-val">${POSTGRES_PASSWORD}</span>
+      POSTGRES_DB: <span class="code-val">${POSTGRES_DB}</span>
+    <span class="code-key">volumes</span>: [<span class="code-val">pg_data:/var/lib/postgresql/data</span>]
+
+  <span class="code-key">sdr_resource_manager</span>:
+    <span class="code-key">build</span>: <span class="code-val">./SdrResourceManager</span>
+    <span class="code-key">devices</span>: [<span class="code-val">"/dev/bus/usb:/dev/bus/usb"</span>]   <span class="code-comment"># USB SDR passthrough</span>
+    <span class="code-key">privileged</span>: <span class="code-val">true</span>
+    <span class="code-key">depends_on</span>: [<span class="code-val">artemis</span>]
+
+  <span class="code-key">acquisition</span>:
+    <span class="code-key">build</span>: <span class="code-val">./AcquisitionApp</span>
+    <span class="code-key">depends_on</span>: [<span class="code-val">artemis</span>, <span class="code-val">sdr_resource_manager</span>]
+    <span class="code-key">volumes</span>: [<span class="code-val">./AcquisitionApp/config:/config:ro</span>]
+
+  <span class="code-key">demod</span>:
+    <span class="code-key">build</span>: <span class="code-val">./DemodApp</span>
+    <span class="code-key">depends_on</span>: [<span class="code-val">artemis</span>]
+
+  <span class="code-key">analysis</span>:
+    <span class="code-key">build</span>: <span class="code-val">./AnalysisApp</span>
+    <span class="code-key">deploy</span>:
+      <span class="code-key">resources</span>:
+        <span class="code-key">reservations</span>:
+          <span class="code-key">devices</span>: [{<span class="code-key">driver</span>: <span class="code-val">nvidia</span>, <span class="code-key">count</span>: 1, <span class="code-key">capabilities</span>: [<span class="code-val">gpu</span>]}]
+    <span class="code-key">volumes</span>:
+      - <span class="code-val">./models:/models:ro</span>
+      - <span class="code-val">./AnalysisApp/config:/config:ro</span>
+    <span class="code-key">depends_on</span>: [<span class="code-val">artemis</span>]
+
+  <span class="code-key">speech</span>:
+    <span class="code-key">build</span>: <span class="code-val">./SpeechApp</span>
+    <span class="code-key">depends_on</span>: [<span class="code-val">artemis</span>]
+
+<span class="code-key">volumes</span>:
+  <span class="code-key">pg_data</span>:</pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <h3>Initialize the database schema</h3>
+<pre class="code-block"><span class="code-cmd">docker compose up -d postgres</span>
+<span class="code-cmd">docker compose exec postgres psql -U openrf openrfstack \
+  -f /docker-entrypoint-initdb.d/init.sql</span>
+<span class="code-comment"># Or mount AcquisitionApp/schema/init.sql as initdb script</span></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <h3>Start the full stack</h3>
+<pre class="code-block"><span class="code-cmd">docker compose up -d</span>
+<span class="code-cmd">docker compose logs -f acquisition demod analysis</span>
+
+<span class="code-comment"># Artemis management UI: http://localhost:8161 (admin/changeme)</span>
+<span class="code-comment"># PostgreSQL:            localhost:5432</span></pre>
+    </div>
+  </div>
+
+</div>
+
+<!-- Kubernetes -->
+<p class="section-label" id="k8s">Kubernetes (k3s) Setup</p>
+
+<div class="note-box">This section assumes k3s on a single node with GPU operator. For multi-node see the SdrScripts repo's <code>k8s/</code> directory.</div>
+
+<div class="tab-row">
+  <div class="tab-btn active" data-tab="k8s-artemis">Artemis</div>
+  <div class="tab-btn" data-tab="k8s-postgres">PostgreSQL</div>
+  <div class="tab-btn" data-tab="k8s-apps">Apps</div>
+  <div class="tab-btn" data-tab="k8s-usb">USB SDR</div>
+</div>
+
+<div class="tab-pane active" id="k8s-artemis">
+<pre class="code-block"><span class="code-key">apiVersion</span>: apps/v1
+<span class="code-key">kind</span>: Deployment
+<span class="code-key">metadata</span>:
+  <span class="code-key">name</span>: <span class="code-val">artemis</span>
+<span class="code-key">spec</span>:
+  <span class="code-key">replicas</span>: 1
+  <span class="code-key">selector</span>: {<span class="code-key">matchLabels</span>: {<span class="code-key">app</span>: <span class="code-val">artemis</span>}}
+  <span class="code-key">template</span>:
+    <span class="code-key">metadata</span>: {<span class="code-key">labels</span>: {<span class="code-key">app</span>: <span class="code-val">artemis</span>}}
+    <span class="code-key">spec</span>:
+      <span class="code-key">containers</span>:
+      - <span class="code-key">name</span>: <span class="code-val">artemis</span>
+        <span class="code-key">image</span>: <span class="code-val">apache/activemq-artemis:2.31.2</span>
+        <span class="code-key">ports</span>: [{<span class="code-key">containerPort</span>: 5672}, {<span class="code-key">containerPort</span>: 8161}]
+        <span class="code-key">env</span>:
+        - {<span class="code-key">name</span>: <span class="code-val">ARTEMIS_USER</span>,     <span class="code-key">valueFrom</span>: {<span class="code-key">secretKeyRef</span>: {<span class="code-key">name</span>: <span class="code-val">amqp-secret</span>, <span class="code-key">key</span>: <span class="code-val">user</span>}}}
+        - {<span class="code-key">name</span>: <span class="code-val">ARTEMIS_PASSWORD</span>, <span class="code-key">valueFrom</span>: {<span class="code-key">secretKeyRef</span>: {<span class="code-key">name</span>: <span class="code-val">amqp-secret</span>, <span class="code-key">key</span>: <span class="code-val">pass</span>}}}</pre>
+</div>
+
+<div class="tab-pane" id="k8s-postgres">
+<pre class="code-block"><span class="code-key">apiVersion</span>: apps/v1
+<span class="code-key">kind</span>: StatefulSet
+<span class="code-key">metadata</span>:
+  <span class="code-key">name</span>: postgres
+<span class="code-key">spec</span>:
+  <span class="code-key">serviceName</span>: <span class="code-val">postgres</span>
+  <span class="code-key">replicas</span>: 1
+  <span class="code-key">volumeClaimTemplates</span>:
+  - <span class="code-key">metadata</span>: {<span class="code-key">name</span>: <span class="code-val">pg-data</span>}
+    <span class="code-key">spec</span>:
+      <span class="code-key">accessModes</span>: [<span class="code-val">ReadWriteOnce</span>]
+      <span class="code-key">resources</span>: {<span class="code-key">requests</span>: {<span class="code-key">storage</span>: <span class="code-val">20Gi</span>}}
+  <span class="code-key">template</span>:
+    <span class="code-key">spec</span>:
+      <span class="code-key">containers</span>:
+      - <span class="code-key">name</span>: postgres
+        <span class="code-key">image</span>: <span class="code-val">postgres:15-alpine</span>
+        <span class="code-key">env</span>:
+        - {<span class="code-key">name</span>: <span class="code-val">POSTGRES_PASSWORD</span>, <span class="code-key">valueFrom</span>: {<span class="code-key">secretKeyRef</span>: {<span class="code-key">name</span>: <span class="code-val">pg-secret</span>, <span class="code-key">key</span>: <span class="code-val">password</span>}}}
+        <span class="code-key">volumeMounts</span>:
+        - {<span class="code-key">name</span>: <span class="code-val">pg-data</span>, <span class="code-key">mountPath</span>: <span class="code-val">/var/lib/postgresql/data</span>}</pre>
+</div>
+
+<div class="tab-pane" id="k8s-apps">
+<pre class="code-block"><span class="code-comment"># AnalysisApp with GPU request</span>
+<span class="code-key">resources</span>:
+  <span class="code-key">limits</span>:
+    <span class="code-key">nvidia.com/gpu</span>: 1
+  <span class="code-key">requests</span>:
+    <span class="code-key">nvidia.com/gpu</span>: 1
+
+<span class="code-comment"># Mount ONNX model from ConfigMap or PVC</span>
+<span class="code-key">volumeMounts</span>:
+- <span class="code-key">name</span>: <span class="code-val">models</span>
+  <span class="code-key">mountPath</span>: <span class="code-val">/models</span>
+  <span class="code-key">readOnly</span>: <span class="code-val">true</span>
+
+<span class="code-comment"># AcquisitionApp — needs SDR USB device access</span>
+<span class="code-comment"># See USB passthrough tab for hostPath volume approach</span></pre>
+</div>
+
+<div class="tab-pane" id="k8s-usb">
+<pre class="code-block"><span class="code-comment"># USB SDR passthrough via hostPath (single-node only)</span>
+<span class="code-key">volumes</span>:
+- <span class="code-key">name</span>: <span class="code-val">usb-bus</span>
+  <span class="code-key">hostPath</span>:
+    <span class="code-key">path</span>: <span class="code-val">/dev/bus/usb</span>
+    <span class="code-key">type</span>: <span class="code-val">Directory</span>
+
+<span class="code-key">volumeMounts</span>:
+- <span class="code-key">name</span>: <span class="code-val">usb-bus</span>
+  <span class="code-key">mountPath</span>: <span class="code-val">/dev/bus/usb</span>
+
+<span class="code-comment"># Required for SoapySDR USB access</span>
+<span class="code-key">securityContext</span>:
+  <span class="code-key">privileged</span>: <span class="code-val">true</span>
+
+<span class="code-comment"># udev rule on the host (run once):</span>
+<span class="code-cmd">echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", MODE="0666"' \
+  | sudo tee /etc/udev/rules.d/99-rtlsdr.rules
+sudo udevadm control --reload-rules</span></pre>
+</div>
+
+<!-- Config -->
+<p class="section-label" id="config">Configuration Reference</p>
+
+<div class="note-box">
+  Each app reads its config from an XML file. Mount the config directory as a read-only volume. The most important knobs for initial setup:
+</div>
+
+<pre class="code-block"><span class="code-comment">&lt;!-- AcquisitionApp/config/scanner.xml — key fields --&gt;</span>
+&lt;<span class="code-key">scanner</span>&gt;
+  &lt;<span class="code-key">amqp</span> host=<span class="code-val">"artemis"</span> port=<span class="code-val">"5672"</span> user=<span class="code-val">"openrf"</span> password=<span class="code-val">"changeme"</span>/&gt;
+  &lt;<span class="code-key">sdr</span>  driver=<span class="code-val">"rtlsdr"</span> serial=<span class="code-val">"00000001"</span> sample_rate=<span class="code-val">"2400000"</span>/&gt;
+  &lt;<span class="code-key">scan</span> center_hz=<span class="code-val">"100000000"</span> span_hz=<span class="code-val">"2000000"</span> dwell_ms=<span class="code-val">"100"</span>/&gt;
+
+  &lt;<span class="code-key">threat</span>&gt;
+    &lt;<span class="code-key">gps_jamming</span>    enabled=<span class="code-val">"true"</span>  ema_alpha=<span class="code-val">"0.05"</span> threshold_db=<span class="code-val">"6.0"</span>/&gt;
+    &lt;<span class="code-key">gps_spoofing</span>   enabled=<span class="code-val">"true"</span>/&gt;
+    &lt;<span class="code-key">adsb_physics</span>   enabled=<span class="code-val">"true"</span>/&gt;
+    &lt;<span class="code-key">ais_anomaly</span>    enabled=<span class="code-val">"true"</span>/&gt;
+    &lt;<span class="code-key">eas_spoof</span>      enabled=<span class="code-val">"true"</span>/&gt;
+    &lt;<span class="code-key">p25_rogue_site</span> enabled=<span class="code-val">"true"</span>/&gt;
+    &lt;<span class="code-key">p25_retune</span>     enabled=<span class="code-val">"true"</span>/&gt;
+  &lt;/<span class="code-key">threat</span>&gt;
+&lt;/<span class="code-key">scanner</span>&gt;
+
+<span class="code-comment">&lt;!-- AnalysisApp/config/analysis.xml --&gt;</span>
+&lt;<span class="code-key">analysis</span>&gt;
+  &lt;<span class="code-key">amqp</span> host=<span class="code-val">"artemis"</span> port=<span class="code-val">"5672"</span>/&gt;
+  &lt;<span class="code-key">model</span> path=<span class="code-val">"/models/amr_cnn_v1_47class.onnx"</span>
+         classes=<span class="code-val">"/models/amr_cnn_v1_47class_classes.json"</span>
+         device=<span class="code-val">"cuda"</span>/&gt;
+  &lt;<span class="code-key">inference</span> batch_size=<span class="code-val">"64"</span> confidence_threshold=<span class="code-val">"0.65"</span>/&gt;
+&lt;/<span class="code-key">analysis</span>&gt;</pre>
+
+<!-- Common issues -->
+<p class="section-label" id="common-issues">Common Issues</p>
+
+<div class="step-list">
+  <div class="step">
+    <div class="step-num" style="background:var(--red)">!</div>
+    <div class="step-body">
+      <h3>SoapySDR device not found in container</h3>
+      <p>The container needs access to <code>/dev/bus/usb</code> and the udev rules must run on the host before the container starts. Verify with:</p>
+<pre class="code-block"><span class="code-cmd">docker run --rm --privileged -v /dev/bus/usb:/dev/bus/usb \
+  openrfstack/sdr_resource_manager SoapySDRUtil --find</span></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num" style="background:var(--red)">!</div>
+    <div class="step-body">
+      <h3>AMQP connection refused at startup</h3>
+      <p>Apps retry on connection failure, but Artemis can take 10–15 s to be ready. Add a healthcheck or use <code>depends_on: condition: service_healthy</code> in Compose. Artemis health endpoint: <code>http://artemis:8161/console/jolokia/read/org.apache.activemq.artemis:broker=*/Started</code></p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num" style="background:var(--red)">!</div>
+    <div class="step-body">
+      <h3>AnalysisApp: CUDA OOM</h3>
+      <p>Reduce <code>batch_size</code> in analysis.xml. The v1 model (47-class, 128ch) needs ~62 MB VRAM. With batch_size=256 and other processes sharing the GPU, 4 GB cards may OOM. Reduce to 64 or 32:</p>
+<pre class="code-block">&lt;<span class="code-key">inference</span> batch_size=<span class="code-val">"32"</span> confidence_threshold=<span class="code-val">"0.65"</span>/&gt;</pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num" style="background:var(--red)">!</div>
+    <div class="step-body">
+      <h3>PlutoSDR: sample drops at high rates</h3>
+      <p>PlutoSDR USB 2.0 limits sustained throughput to ~5 MS/s. At 61.44 MS/s the device overflows. Set <code>sample_rate</code> ≤ 4000000 in scanner.xml. Use a USB 3.0 hub — PlutoSDR still connects via USB 2.0 but avoids shared bandwidth with other USB 3.0 devices that can cause bus contention.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num" style="background:var(--red)">!</div>
+    <div class="step-body">
+      <h3>pqxx demangle_type_name linker error</h3>
+      <p>Occurs when libpqxx 7.x is paired with <code>std::optional&lt;T&gt;</code> in the same translation unit. The <code>AlertStore</code> uses a pimpl pattern and manually-built SQL strings to avoid this — do not include <code>&lt;pqxx/pqxx&gt;</code> in any header that is also included by a TU that includes <code>&lt;nlohmann/json.hpp&gt;</code>.</p>
+    </div>
+  </div>
+</div>
+
+</div>
+</main>
+
+<script src="app.js"></script>
+<script>
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    btn.closest('.content').querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.closest('.content').querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(tab).classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

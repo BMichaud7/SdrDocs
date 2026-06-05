@@ -28,6 +28,41 @@
     "label": "/Sdr/tools.html"
   },
   {
+    "icon": "🔌",
+    "title": "Hardware Compatibility",
+    "desc": "RTL-SDR, PlutoSDR, LimeSDR, HackRF, USRP — frequency ranges, ADC bits, tested status, config snippets",
+    "url": "/Sdr/hardware.html",
+    "label": "/Sdr/hardware.html"
+  },
+  {
+    "icon": "📻",
+    "title": "Frequency Explorer",
+    "desc": "Interactive log-scale spectrum map from 500 kHz to 6 GHz — click any band to inspect protocol and demodulator",
+    "url": "/Sdr/frequency.html",
+    "label": "/Sdr/frequency.html"
+  },
+  {
+    "icon": "🔬",
+    "title": "Protocol Decoder Examples",
+    "desc": "Real decoded frames for ADS-B, AIS, P25, EAS, DSC, ACARS — annotated field-by-field with threat detection logic",
+    "url": "/Sdr/protocols.html",
+    "label": "/Sdr/protocols.html"
+  },
+  {
+    "icon": "⚡",
+    "title": "Performance Benchmarks",
+    "desc": "Throughput, latency, and memory profiling — GPU vs CPU inference, multi-channel scaling, full pipeline timing",
+    "url": "/Sdr/benchmark.html",
+    "label": "/Sdr/benchmark.html"
+  },
+  {
+    "icon": "🚀",
+    "title": "Deployment Guide",
+    "desc": "Docker Compose and Kubernetes setup — SDR USB passthrough, AMQP, PostgreSQL, GPU access, common issues",
+    "url": "/Sdr/deploy.html",
+    "label": "/Sdr/deploy.html"
+  },
+  {
     "icon": "📖",
     "title": "API Documentation",
     "desc": "Doxygen HTML for all 10 OpenRFStack repos — auto-updated by GitHub Actions on every push",

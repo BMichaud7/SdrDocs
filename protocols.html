@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Protocol Decoder Examples — Open RF Stack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+.proto-tabs { display:flex; flex-wrap:wrap; gap:.4rem; margin:1.2rem 0 .5rem }
+.proto-tab {
+  padding:.35rem 1rem; border-radius:2rem; font-size:.8rem; font-weight:600;
+  background:var(--bg3); border:1px solid var(--bd2); color:var(--muted);
+  cursor:pointer; transition:all .12s; user-select:none;
+}
+.proto-tab.active { background:var(--blue); border-color:var(--blue); color:#fff }
+.proto-tab:hover:not(.active) { border-color:var(--blue); color:var(--blue) }
+
+.proto-panel { display:none }
+.proto-panel.active { display:block }
+
+.frame-wrap {
+  background:var(--bg2); border:1px solid var(--bd); border-radius:var(--r);
+  padding:1.4rem; margin:1rem 0;
+}
+.frame-title { font-size:.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:1rem }
+.frame-bits {
+  font-family:'JetBrains Mono',monospace; font-size:.78rem; line-height:2;
+  display:flex; flex-wrap:wrap; gap:2px; margin-bottom:1.2rem; align-items:flex-start;
+}
+.bit-group {
+  display:flex; flex-direction:column; align-items:center; gap:1px;
+}
+.bit-row { display:flex; gap:1px }
+.bit { width:12px; height:18px; border-radius:2px; display:flex; align-items:center; justify-content:center; font-size:.55rem; color:rgba(255,255,255,.7); font-family:'JetBrains Mono',monospace }
+.bit-label { font-size:.6rem; color:var(--muted); text-align:center; white-space:nowrap; max-width:80px; overflow:hidden; text-overflow:ellipsis; padding-top:2px }
+
+.field-breakdown { display:flex; flex-direction:column; gap:.5rem; margin-top:1rem }
+.fb-row { display:grid; grid-template-columns:180px 1fr; gap:.75rem; align-items:start; padding:.55rem .75rem; background:var(--bg3); border:1px solid var(--bd2); border-radius:6px; font-size:.83rem }
+.fb-row:hover { border-color:var(--bd) }
+.fb-field { font-family:'JetBrains Mono',monospace; font-weight:600; font-size:.78rem }
+.fb-val { color:var(--tx) }
+.fb-val .v { font-family:'JetBrains Mono',monospace; color:var(--green) }
+.fb-val .note { color:var(--muted); font-size:.78rem; margin-top:.15rem }
+
+.raw-frame {
+  font-family:'JetBrains Mono',monospace; font-size:.8rem; color:var(--teal);
+  background:var(--bg3); border:1px solid var(--bd2); border-radius:6px;
+  padding:.75rem 1rem; word-break:break-all; line-height:1.9; margin:.75rem 0;
+}
+.raw-frame .hl { color:var(--orange) }
+.raw-frame .hl2 { color:var(--purple) }
+.raw-frame .hl3 { color:var(--blue) }
+.raw-frame .hl4 { color:var(--red) }
+
+.alert-box { display:flex; align-items:flex-start; gap:.75rem; background:rgba(248,81,73,.08); border:1px solid rgba(248,81,73,.25); border-radius:var(--r); padding:.9rem 1.1rem; margin:1rem 0; font-size:.85rem; line-height:1.65 }
+.alert-icon { font-size:1.1rem; flex-shrink:0; margin-top:.05rem }
+.alert-box strong { color:var(--red) }
+
+.json-out { background:var(--bg3); border:1px solid var(--bd2); border-radius:var(--r); padding:1rem 1.2rem; font-family:'JetBrains Mono',monospace; font-size:.78rem; line-height:1.8; margin:.75rem 0; overflow-x:auto; white-space:pre }
+.jk { color:var(--blue) }
+.js { color:var(--green) }
+.jn { color:var(--orange) }
+.jb { color:var(--purple) }
+
+.section-label { font-size:.75rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:2rem 0 .75rem }
+.proto-meta { display:flex; flex-wrap:wrap; gap:.4rem; margin:.5rem 0 1rem }
+.proto-meta span { font-size:.75rem; padding:.2rem .65rem; background:var(--bg3); border:1px solid var(--bd2); border-radius:2rem; color:var(--muted); font-weight:600 }
+</style>
+</head>
+<body>
+
+<nav id="nav" style="padding-top:.75rem">
+  <a class="nav-logo" href="index.html"><span>📡</span> Open RF Stack</a>
+  <div class="nav-sep">Protocol Examples</div>
+  <a href="#adsb">ADS-B</a>
+  <a href="#ais">AIS</a>
+  <a href="#p25">P25 TSBK</a>
+  <a href="#eas">EAS SAME</a>
+  <a href="#dsc">DSC</a>
+  <a href="#acars">ACARS</a>
+  <div class="nav-sep">Pages</div>
+  <a href="index.html">← Documentation</a>
+  <a href="spectrograms.html">Spectrograms</a>
+  <a href="accuracy.html">Accuracy Charts</a>
+  <a href="tools.html">Calculators</a>
+</nav>
+
+<header>
+  <div class="hdr">
+    <div class="hdr-top">
+      <div class="logo-wrap">🔬</div>
+      <div>
+        <h1>Protocol Decoder Examples</h1>
+        <p>Real decoded frames from ADS-B, AIS, P25, EAS, DSC, and ACARS — annotated field-by-field with the threat detection logic Open RF Stack applies to each.</p>
+      </div>
+    </div>
+    <div class="hdr-meta">
+      <span class="tag">6 protocols</span>
+      <span class="tag">Field-level annotation</span>
+      <span class="tag">JSON output format</span>
+    </div>
+  </div>
+</header>
+
+<main>
+<div class="content">
+
+<div class="proto-tabs">
+  <div class="proto-tab active" data-target="adsb">ADS-B 1090ES</div>
+  <div class="proto-tab" data-target="ais">AIS VDM</div>
+  <div class="proto-tab" data-target="p25">P25 TSBK</div>
+  <div class="proto-tab" data-target="eas">EAS SAME</div>
+  <div class="proto-tab" data-target="dsc">DSC Distress</div>
+  <div class="proto-tab" data-target="acars">ACARS</div>
+</div>
+
+<!-- ADS-B -->
+<div class="proto-panel active" id="panel-adsb">
+  <div class="frame-wrap">
+    <div class="frame-title" id="adsb">ADS-B Extended Squitter (DF 17) — 112 bits</div>
+    <div class="proto-meta">
+      <span>1090 MHz</span><span>1 Mbps PPM</span><span>112-bit frame</span><span>CRC-24</span><span>AdsbDemod</span>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Each aircraft transmits an unsolicited 112-bit squitter every ~0.5 s. The 56-bit message payload encodes position, velocity, identity, or status depending on the Type Code (TC).</p>
+
+    <div class="raw-frame"><span class="hl">8D</span><span class="hl2">484C2A</span><span class="hl3">58</span>603DAB8E77E92E<span class="hl4">DD45E2</span>
+<span style="color:var(--muted)">│  │       │  └─ ME payload (56 bits)         └─ CRC-24</span>
+<span style="color:var(--muted)">│  │       └─ Type Code 11 = Airborne Velocity</span>
+<span style="color:var(--muted)">│  └─ ICAO address: 0x484C2A (SWA4912)</span>
+<span style="color:var(--muted)">└─ DF 17 = Extended Squitter (8D hex)</span></div>
+
+    <div class="field-breakdown">
+      <div class="fb-row"><span class="fb-field">DF (5 bits)</span><div class="fb-val"><span class="v">17</span><div class="note">Downlink Format 17 = ADS-B Extended Squitter</div></div></div>
+      <div class="fb-row"><span class="fb-field">CA (3 bits)</span><div class="fb-val"><span class="v">5</span><div class="note">Capability = Level 2+, airborne</div></div></div>
+      <div class="fb-row"><span class="fb-field">ICAO (24 bits)</span><div class="fb-val"><span class="v">0x484C2A</span><div class="note">Unique aircraft address — SWA4912 (Southwest Airlines)</div></div></div>
+      <div class="fb-row"><span class="fb-field">TC (5 bits)</span><div class="fb-val"><span class="v">11</span><div class="note">Type Code 11 = Airborne Velocity message</div></div></div>
+      <div class="fb-row"><span class="fb-field">Subtype (3 bits)</span><div class="fb-val"><span class="v">1</span><div class="note">Subsonic airspeed, GNSS altitude</div></div></div>
+      <div class="fb-row"><span class="fb-field">E/W velocity (10 bits)</span><div class="fb-val"><span class="v">-247 kt</span><div class="note">Westward component of groundspeed</div></div></div>
+      <div class="fb-row"><span class="fb-field">N/S velocity (10 bits)</span><div class="fb-val"><span class="v">+103 kt</span><div class="note">Northward component. Combined groundspeed = 267 kt ✓</div></div></div>
+      <div class="fb-row"><span class="fb-field">Vertical rate (9 bits)</span><div class="fb-val"><span class="v">+64 fpm</span><div class="note">Climbing slightly</div></div></div>
+      <div class="fb-row"><span class="fb-field">CRC-24</span><div class="fb-val"><span class="v">0xDD45E2</span><div class="note">Passes validation — frame accepted</div></div></div>
+    </div>
+  </div>
+
+  <div class="alert-box">
+    <span class="alert-icon">⚠</span>
+    <div><strong>Threat detection:</strong> AdsbDemod flags frames where groundspeed &gt; 700 kt, altitude &gt; 60,000 ft, or cumulative CRC error rate &gt; 80% over a sliding 60-second window. Any of these conditions emits an <code>ADSB_PHYSICS_ANOMALY</code> alert to the AMQP bus.</div>
+  </div>
+
+  <div class="json-out"><span class="jk">"type"</span>: <span class="js">"ADSB_POSITION"</span>,
+<span class="jk">"icao"</span>: <span class="js">"484C2A"</span>,
+<span class="jk">"callsign"</span>: <span class="js">"SWA4912"</span>,
+<span class="jk">"lat"</span>: <span class="jn">33.9425</span>,
+<span class="jk">"lon"</span>: <span class="jn">-118.4081</span>,
+<span class="jk">"alt_ft"</span>: <span class="jn">4875</span>,
+<span class="jk">"groundspeed_kt"</span>: <span class="jn">267</span>,
+<span class="jk">"crc_ok"</span>: <span class="jb">true</span>,
+<span class="jk">"alert"</span>: <span class="jb">null</span></div>
+</div>
+
+<!-- AIS -->
+<div class="proto-panel" id="panel-ais">
+  <div class="frame-wrap">
+    <div class="frame-title" id="ais">AIS VDM — ITU-R M.1371 Message Type 1 (Position Report Class A)</div>
+    <div class="proto-meta">
+      <span>161.975 / 162.025 MHz</span><span>9600 baud GMSK</span><span>168-bit payload</span><span>HDLC framing</span><span>AisDemod</span>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">AIS transmits over NMEA 0183 encapsulation. The VDM sentence carries ASCII-armored binary payload. Message Type 1/2/3 are Class A position reports sent every 2–10 seconds while underway.</p>
+
+    <div class="raw-frame">!AIVDM,1,1,,A,<span class="hl">15M67N</span><span class="hl2">0000</span><span class="hl3">wJeVP</span><span class="hl4">j`Tn</span>0000,0*73
+<span style="color:var(--muted)">│              │      │      │    │    │   └─ NMEA checksum</span>
+<span style="color:var(--muted)">│              │      │      │    │    └─ Fill bits</span>
+<span style="color:var(--muted)">│              │      │      │    └─ Speed / course / heading</span>
+<span style="color:var(--muted)">│              │      │      └─ Longitude / Latitude (packed)</span>
+<span style="color:var(--muted)">│              │      └─ MMSI 338234718</span>
+<span style="color:var(--muted)">│              └─ Message type 1, repeat 0</span>
+<span style="color:var(--muted)">└─ VDM = received VHF Data-link Message</span></div>
+
+    <div class="field-breakdown">
+      <div class="fb-row"><span class="fb-field">Message Type (6 bits)</span><div class="fb-val"><span class="v">1</span><div class="note">Class A Position Report</div></div></div>
+      <div class="fb-row"><span class="fb-field">Repeat Indicator (2 bits)</span><div class="fb-val"><span class="v">0</span><div class="note">Not repeated</div></div></div>
+      <div class="fb-row"><span class="fb-field">MMSI (30 bits)</span><div class="fb-val"><span class="v">338234718</span><div class="note">US flag vessel (338 = USA). Validated: 9 digits, MID 338 ✓</div></div></div>
+      <div class="fb-row"><span class="fb-field">Navigation Status (4 bits)</span><div class="fb-val"><span class="v">0</span><div class="note">Under way using engine</div></div></div>
+      <div class="fb-row"><span class="fb-field">ROT (8 bits)</span><div class="fb-val"><span class="v">0°/min</span><div class="note">Not turning</div></div></div>
+      <div class="fb-row"><span class="fb-field">SOG (10 bits)</span><div class="fb-val"><span class="v">12.3 kt</span><div class="note">Speed over ground. Threshold: &gt;50 kt = anomaly ✓</div></div></div>
+      <div class="fb-row"><span class="fb-field">Longitude (28 bits)</span><div class="fb-val"><span class="v">-122.4194°</span><div class="note">San Francisco Bay area</div></div></div>
+      <div class="fb-row"><span class="fb-field">Latitude (27 bits)</span><div class="fb-val"><span class="v">37.8049°</span><div class="note">Valid position fix</div></div></div>
+      <div class="fb-row"><span class="fb-field">COG (12 bits)</span><div class="fb-val"><span class="v">185.4°</span><div class="note">Course over ground (southbound)</div></div></div>
+      <div class="fb-row"><span class="fb-field">True Heading (9 bits)</span><div class="fb-val"><span class="v">185°</span><div class="note">Matches COG — consistent</div></div></div>
+    </div>
+  </div>
+
+  <div class="alert-box">
+    <span class="alert-icon">⚠</span>
+    <div><strong>Threat detection:</strong> AisDemod flags SOG &gt; 50 kt (physically impossible for most vessels), invalid MMSI format (not 9 digits, invalid MID, or 000000000), and duplicate MMSI from two different positions within 30 seconds — a strong indicator of AIS spoofing.</div>
+  </div>
+
+  <div class="json-out"><span class="jk">"type"</span>: <span class="js">"AIS_POSITION"</span>,
+<span class="jk">"mmsi"</span>: <span class="jn">338234718</span>,
+<span class="jk">"lat"</span>: <span class="jn">37.8049</span>,
+<span class="jk">"lon"</span>: <span class="jn">-122.4194</span>,
+<span class="jk">"sog_kt"</span>: <span class="jn">12.3</span>,
+<span class="jk">"cog_deg"</span>: <span class="jn">185.4</span>,
+<span class="jk">"nav_status"</span>: <span class="js">"underway"</span>,
+<span class="jk">"alert"</span>: <span class="jb">null</span></div>
+</div>
+
+<!-- P25 -->
+<div class="proto-panel" id="panel-p25">
+  <div class="frame-wrap">
+    <div class="frame-title" id="p25">P25 TSBK — Trunking Signaling Block (Group Voice Grant)</div>
+    <div class="proto-meta">
+      <span>138–900 MHz</span><span>9600 baud C4FM / QPSK</span><span>96-bit TSBK</span><span>CRC-16</span><span>P25ControlDecoder</span>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">The P25 control channel broadcasts Trunking Signaling Blocks at 3840 TSBKs/min. Open RF Stack parses every TSBK to extract voice grants and follow traffic in real time.</p>
+
+    <div class="raw-frame"><span class="hl">34</span> <span class="hl2">00</span> <span class="hl3">00 3D 09 F4 00</span> <span class="hl4">7B 18 F0 BD 30</span> A2 3F
+<span style="color:var(--muted)">│  │  └─ Options / Emergency              └─ Source / Dest TGID</span>
+<span style="color:var(--muted)">│  └─ Last block / Protect bits</span>
+<span style="color:var(--muted)">└─ Opcode 0x34 = Group Voice Chan Grant</span></div>
+
+    <div class="field-breakdown">
+      <div class="fb-row"><span class="fb-field">Opcode (8 bits)</span><div class="fb-val"><span class="v">0x34</span><div class="note">GRP_V_CH_GRANT — Group Voice Channel Grant</div></div></div>
+      <div class="fb-row"><span class="fb-field">Last Block (1 bit)</span><div class="fb-val"><span class="v">1</span><div class="note">This is the last TSBK in the burst</div></div></div>
+      <div class="fb-row"><span class="fb-field">Protect (1 bit)</span><div class="fb-val"><span class="v">0</span><div class="note">Not encrypted (unprotected voice)</div></div></div>
+      <div class="fb-row"><span class="fb-field">Emergency (1 bit)</span><div class="fb-val"><span class="v">0</span><div class="note">Normal call, not emergency</div></div></div>
+      <div class="fb-row"><span class="fb-field">Channel ID (4 bits)</span><div class="fb-val"><span class="v">0</span><div class="note">References channel table for frequency</div></div></div>
+      <div class="fb-row"><span class="fb-field">Channel Number (12 bits)</span><div class="fb-val"><span class="v">0x09F</span><div class="note">→ 851.0125 MHz (computed from channel plan)</div></div></div>
+      <div class="fb-row"><span class="fb-field">Destination TGID (16 bits)</span><div class="fb-val"><span class="v">0x7B18</span><div class="note">Talk Group 31512 — retune to voice channel</div></div></div>
+      <div class="fb-row"><span class="fb-field">Source (24 bits)</span><div class="fb-val"><span class="v">0xF0BD30</span><div class="note">Radio ID of transmitting unit</div></div></div>
+      <div class="fb-row"><span class="fb-field">CRC-16 (16 bits)</span><div class="fb-val"><span class="v">0xA23F</span><div class="note">Passes — frame accepted</div></div></div>
+    </div>
+  </div>
+
+  <div class="alert-box">
+    <span class="alert-icon">⚠</span>
+    <div><strong>Threat detection:</strong> P25ControlDecoder tracks the WACN (Wide Area Communications Network) ID in RFSS_STATUS_BCAST messages. A WACN change mid-session that doesn't match any known adjacent system is emitted as a <code>P25_ROGUE_SITE</code> alert — a technique used by IMSI-catcher style P25 intercept devices.</div>
+  </div>
+
+  <div class="json-out"><span class="jk">"type"</span>: <span class="js">"P25_VOICE_GRANT"</span>,
+<span class="jk">"tgid"</span>: <span class="jn">31512</span>,
+<span class="jk">"source_id"</span>: <span class="jn">15777072</span>,
+<span class="jk">"channel_mhz"</span>: <span class="jn">851.0125</span>,
+<span class="jk">"encrypted"</span>: <span class="jb">false</span>,
+<span class="jk">"emergency"</span>: <span class="jb">false</span>,
+<span class="jk">"alert"</span>: <span class="jb">null</span></div>
+</div>
+
+<!-- EAS -->
+<div class="proto-panel" id="panel-eas">
+  <div class="frame-wrap">
+    <div class="frame-title" id="eas">EAS SAME Header — FCC Part 11 Emergency Alert System</div>
+    <div class="proto-meta">
+      <span>162.4–162.55 MHz</span><span>520.83 baud FSK</span><span>ASCII text</span><span>NOAA WX channels</span><span>EasSameDemod</span>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">EAS alerts begin with a SAME header transmitted three times in FSK on NOAA Weather Radio channels. The header encodes originator, event code, area, expiry, time, and call sign — all as ASCII.</p>
+
+    <div class="raw-frame">ZCZC-<span class="hl">WXR</span>-<span class="hl2">TOR</span>-<span class="hl3">039173</span>-<span class="hl3">039051</span>-<span class="hl4">0030</span>+<span class="hl">0600</span>-<span class="hl2">1421350</span>-<span class="hl3">KCLE/NWS</span>-
+<span style="color:var(--muted)">│     │   │   └─ SAME area codes (counties) ─┘   │    │       └─ Originator call sign / org</span>
+<span style="color:var(--muted)">│     │   └─ Event code: TOR = Tornado Warning    │    └─ Issue time (Julian day + HHMM UTC)</span>
+<span style="color:var(--muted)">│     └─ Originator: WXR = NWS                   └─ Purge time: 0030 min</span>
+<span style="color:var(--muted)">└─ ZCZC = SAME header preamble</span></div>
+
+    <div class="field-breakdown">
+      <div class="fb-row"><span class="fb-field">Preamble</span><div class="fb-val"><span class="v">ZCZC</span><div class="note">Start of SAME header (preceded by 16-byte 0xAB bit sync)</div></div></div>
+      <div class="fb-row"><span class="fb-field">Originator (3 chars)</span><div class="fb-val"><span class="v">WXR</span><div class="note">National Weather Service. Valid codes: WXR, CIV, PEP, EAS</div></div></div>
+      <div class="fb-row"><span class="fb-field">Event Code (3 chars)</span><div class="fb-val"><span class="v">TOR</span><div class="note">Tornado Warning. Open RF Stack flags rare codes: CDW (Civil Danger), EVI (Evacuation Immediate), HMW (Hazardous Materials)</div></div></div>
+      <div class="fb-row"><span class="fb-field">SAME Areas</span><div class="fb-val"><span class="v">039173, 039051</span><div class="note">Ohio counties (FIPS codes): Medina, Cuyahoga</div></div></div>
+      <div class="fb-row"><span class="fb-field">Purge Time (4 chars)</span><div class="fb-val"><span class="v">0030</span><div class="note">Alert valid for 30 minutes</div></div></div>
+      <div class="fb-row"><span class="fb-field">Valid Duration (4 chars)</span><div class="fb-val"><span class="v">0600</span><div class="note">Event window: 6 hours from issue time</div></div></div>
+      <div class="fb-row"><span class="fb-field">Issue Time (7 chars)</span><div class="fb-val"><span class="v">1421350</span><div class="note">Julian day 142, 13:50 UTC</div></div></div>
+      <div class="fb-row"><span class="fb-field">Call Sign</span><div class="fb-val"><span class="v">KCLE/NWS</span><div class="note">NWS Cleveland. Validated against known FCC call sign database.</div></div></div>
+    </div>
+  </div>
+
+  <div class="alert-box">
+    <span class="alert-icon">⚠</span>
+    <div><strong>Threat detection:</strong> EasSameDemod validates the originator code against the FCC-defined list (WXR, CIV, PEP, EAS) and flags rare or never-used event codes (CDW, EVI, HMW, NUW). An invalid originator or geographically implausible area code triggers an <code>EAS_SPOOFED_ALERT</code> alert.</div>
+  </div>
+
+  <div class="json-out"><span class="jk">"type"</span>: <span class="js">"EAS_SAME_HEADER"</span>,
+<span class="jk">"originator"</span>: <span class="js">"WXR"</span>,
+<span class="jk">"event"</span>: <span class="js">"TOR"</span>,
+<span class="jk">"areas"</span>: [<span class="jn">39173</span>, <span class="jn">39051</span>],
+<span class="jk">"purge_min"</span>: <span class="jn">30</span>,
+<span class="jk">"callsign"</span>: <span class="js">"KCLE/NWS"</span>,
+<span class="jk">"alert"</span>: <span class="jb">null</span></div>
+</div>
+
+<!-- DSC -->
+<div class="proto-panel" id="panel-dsc">
+  <div class="frame-wrap">
+    <div class="frame-title" id="dsc">DSC Distress Call — ITU-R M.493 Digital Selective Calling</div>
+    <div class="proto-meta">
+      <span>156.525 MHz (Ch 70)</span><span>1200 baud FSK</span><span>10-bit symbols (error detection)</span><span>GMDSS</span><span>DscDemod</span>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">DSC is the digital distress calling protocol used by GMDSS-equipped vessels. A distress call is the highest-priority message, triggering an audible alarm at all receiving coast stations and vessels.</p>
+
+    <div class="raw-frame">DX DE <span class="hl">366003510</span> / <span class="hl2">112</span> / <span class="hl3">3141592 N 07653 W</span> / <span class="hl4">J3E</span> / 2142
+<span style="color:var(--muted)">│      │          │     └─ Position (lat/lon)              │    └─ UTC time</span>
+<span style="color:var(--muted)">│      │          └─ Category 112 = Distress               └─ Telecommand: J3E (SSB telephony)</span>
+<span style="color:var(--muted)">│      └─ Self MMSI</span>
+<span style="color:var(--muted)">└─ Distress call format (from DX DE)</span></div>
+
+    <div class="field-breakdown">
+      <div class="fb-row"><span class="fb-field">Format Specifier</span><div class="fb-val"><span class="v">112</span><div class="note">Category 112 = Distress — highest priority DSC format</div></div></div>
+      <div class="fb-row"><span class="fb-field">MMSI (9 digits)</span><div class="fb-val"><span class="v">366003510</span><div class="note">US vessel (MID 366). Validated: 9 digits, valid MID ✓</div></div></div>
+      <div class="fb-row"><span class="fb-field">Distress Nature</span><div class="fb-val"><span class="v">Undesignated</span><div class="note">Cause unknown — vessel is in distress</div></div></div>
+      <div class="fb-row"><span class="fb-field">Position</span><div class="fb-val"><span class="v">31°41.592′N 076°53′W</span><div class="note">Off the South Carolina coast</div></div></div>
+      <div class="fb-row"><span class="fb-field">UTC Time</span><div class="fb-val"><span class="v">21:42</span><div class="note">Time of distress</div></div></div>
+      <div class="fb-row"><span class="fb-field">Telecommand</span><div class="fb-val"><span class="v">J3E</span><div class="note">Subsequent communication on SSB voice</div></div></div>
+    </div>
+  </div>
+
+  <div class="alert-box">
+    <span class="alert-icon">⚠</span>
+    <div><strong>Threat detection:</strong> DscDemod validates that category-112 distress calls use an MMSI with valid Maritime Identification Digit (MID) and 9-digit format. An MMSI of 000000000, a land-station format (00XXXXXXX), or a device MMSI (97XXXXXXX) in a distress call triggers a <code>DSC_INVALID_DISTRESS</code> alert.</div>
+  </div>
+
+  <div class="json-out"><span class="jk">"type"</span>: <span class="js">"DSC_DISTRESS"</span>,
+<span class="jk">"mmsi"</span>: <span class="jn">366003510</span>,
+<span class="jk">"category"</span>: <span class="jn">112</span>,
+<span class="jk">"lat"</span>: <span class="jn">31.6932</span>,
+<span class="jk">"lon"</span>: <span class="jn">-76.883</span>,
+<span class="jk">"utc"</span>: <span class="js">"21:42"</span>,
+<span class="jk">"telecommand"</span>: <span class="js">"J3E"</span>,
+<span class="jk">"alert"</span>: <span class="jb">null</span></div>
+</div>
+
+<!-- ACARS -->
+<div class="proto-panel" id="panel-acars">
+  <div class="frame-wrap">
+    <div class="frame-title" id="acars">ACARS — Aircraft Communications Addressing and Reporting System</div>
+    <div class="proto-meta">
+      <span>129.125 / 130.025 / 130.450 MHz</span><span>2400 baud AM</span><span>ASCII payload</span><span>AcarsDemod</span>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">ACARS is the primary VHF digital datalink for commercial aviation. Messages carry ATIS requests, fuel reports, position reports, mechanical status, and crew communications — all in plaintext ASCII.</p>
+
+    <div class="raw-frame"><span class="hl">.N628UA</span>/<span class="hl2">2</span> <span class="hl3">5Z</span><span class="hl4">UA0042</span> <span class="hl">KEWR</span>KLAX
+POSN37.612,W114.918,214312,350,0469,M053,2812
+FUEL 23.4 ETA 2231
+
+<span style="color:var(--muted)">└─ Aircraft reg  Ack  Label  Flight ID  Dep/Arr airports</span></div>
+
+    <div class="field-breakdown">
+      <div class="fb-row"><span class="fb-field">Aircraft Reg</span><div class="fb-val"><span class="v">N628UA</span><div class="note">United Airlines Boeing 777-200, registered N628UA</div></div></div>
+      <div class="fb-row"><span class="fb-field">Acknowledgement</span><div class="fb-val"><span class="v">2</span><div class="note">Message sequence / ack code</div></div></div>
+      <div class="fb-row"><span class="fb-field">Label</span><div class="fb-val"><span class="v">5Z</span><div class="note">OOOI (Out/Off/On/In) position report label</div></div></div>
+      <div class="fb-row"><span class="fb-field">Flight ID</span><div class="fb-val"><span class="v">UA0042</span><div class="note">United flight 42, Newark → Los Angeles</div></div></div>
+      <div class="fb-row"><span class="fb-field">Position</span><div class="fb-val"><span class="v">37.612°N, 114.918°W</span><div class="note">Over Nevada/Utah border</div></div></div>
+      <div class="fb-row"><span class="fb-field">Time (UTC)</span><div class="fb-val"><span class="v">21:43:12</span><div class="note">Position report time</div></div></div>
+      <div class="fb-row"><span class="fb-field">Altitude</span><div class="fb-val"><span class="v">FL350</span><div class="note">35,000 ft cruise altitude</div></div></div>
+      <div class="fb-row"><span class="fb-field">Fuel remaining</span><div class="fb-val"><span class="v">23.4 klbs</span><div class="note">Fuel on board in thousands of pounds</div></div></div>
+      <div class="fb-row"><span class="fb-field">ETA</span><div class="fb-val"><span class="v">22:31 UTC</span><div class="note">Estimated arrival at KLAX</div></div></div>
+    </div>
+  </div>
+
+  <div class="json-out"><span class="jk">"type"</span>: <span class="js">"ACARS_MSG"</span>,
+<span class="jk">"reg"</span>: <span class="js">"N628UA"</span>,
+<span class="jk">"flight"</span>: <span class="js">"UA0042"</span>,
+<span class="jk">"label"</span>: <span class="js">"5Z"</span>,
+<span class="jk">"lat"</span>: <span class="jn">37.612</span>,
+<span class="jk">"lon"</span>: <span class="jn">-114.918</span>,
+<span class="jk">"alt_ft"</span>: <span class="jn">35000</span>,
+<span class="jk">"fuel_klbs"</span>: <span class="jn">23.4</span>,
+<span class="jk">"eta_utc"</span>: <span class="js">"22:31"</span>,
+<span class="jk">"alert"</span>: <span class="jb">null</span></div>
+</div>
+
+</div>
+</main>
+
+<script src="app.js"></script>
+<script>
+document.querySelectorAll('.proto-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.target;
+    document.querySelectorAll('.proto-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.proto-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + target).classList.add('active');
+  });
+});
+</script>
+</body>
+</html>
