@@ -144,12 +144,12 @@
       <div class="hw-spec"><span class="sk">Frequency</span><br><span class="sv">325 MHz – 3.8 GHz</span></div>
       <div class="hw-spec"><span class="sk">Max sample rate</span><br><span class="sv">61.44 MS/s</span></div>
       <div class="hw-spec"><span class="sk">ADC resolution</span><br><span class="sv">12-bit</span></div>
-      <div class="hw-spec"><span class="sk">Full duplex</span><br><span class="sv tick">✓ Tx + Rx</span></div>
+      <div class="hw-spec"><span class="sk">Full duplex</span><br><span class="sv tick">✓ 2 Tx + 2 Rx</span></div>
       <div class="hw-spec"><span class="sk">SoapySDR driver</span><br><span class="sv">SoapyPlutoSDR</span></div>
-      <div class="hw-spec"><span class="sk">Simultaneous ch</span><br><span class="sv">1 Tx + 1 Rx</span></div>
+      <div class="hw-spec"><span class="sk">Connection</span><br><span class="sv">Ethernet (ip:) / USB</span></div>
     </div>
-    <div class="hw-driver">SoapySDRUtil --find="driver=plutosdr"</div>
-    <div class="hw-note"><strong>Hardware tested</strong> with SdrResourceManager in the CI hardware test suite. Race condition in SharedLo arbitration was caught during PlutoSDR testing. Practical frequency range extended to 70 MHz – 6 GHz via firmware hack. USB 2.0 limits sustained throughput to ~5 MS/s in practice.</div>
+    <div class="hw-driver">SoapySDRUtil --find="driver=plutosdr,uri=ip:192.168.1.253"</div>
+    <div class="hw-note"><strong>Hardware tested</strong> with SdrResourceManager. The AD9363 chip is a 2T2R device — custom firmware unlocks both RX channels and adds Ethernet connectivity. Ethernet removes the USB 2.0 bandwidth bottleneck entirely, allowing both channels to run at full rate simultaneously. Frequency range extended to 70 MHz – 6 GHz via firmware. Both coherent RX channels are suitable for MUSIC direction finding without an external reference. In containers use host networking or USB fallback (<code>uri=usb:</code>) as the IP driver may not route correctly through container NAT.</div>
   </div>
 
   <!-- LimeSDR Mini 2 -->
@@ -263,13 +263,13 @@
     <tr>
       <td><strong>PlutoSDR</strong></td>
       <td>$250</td>
-      <td>325 MHz–3.8 GHz</td>
+      <td>70 MHz–6 GHz*</td>
       <td>61.44 MS/s</td>
       <td>12</td>
       <td>Full</td>
-      <td>1T+1R</td>
+      <td>2T+2R*</td>
       <td>~72 dB</td>
-      <td>USB 2.0</td>
+      <td>Ethernet / USB</td>
       <td><span class="tick">✓</span></td>
     </tr>
     <tr>
@@ -327,7 +327,7 @@
 
 <div class="tip-box">
   <strong>Direction finding (MUSIC algorithm)</strong><br>
-  USRP B210 ($2,100). Only device in this list with two coherent Rx channels required for phase-based DF. Alternatively, use two synchronized PlutoSDRs with external 10 MHz reference — contact the OpenRFStack team for the dual-device DF configuration.
+  USRP B210 ($2,100) or PlutoSDR with Ethernet + 2T2R firmware ($250). Both expose two phase-coherent RX channels on the same LO — exactly what MUSIC direction finding requires. The PlutoSDR is dramatically cheaper; the B210 offers higher sample rates and better dynamic range for demanding environments.
 </div>
 
 <div class="tip-box">
@@ -342,8 +342,10 @@
 <pre style="font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--tx);white-space:pre-wrap;line-height:1.7">&lt;!-- RTL-SDR --&gt;
 &lt;sdr driver="rtlsdr" serial="00000001" sample_rate="2400000" gain="30" /&gt;
 
-&lt;!-- PlutoSDR --&gt;
-&lt;sdr driver="plutosdr" uri="usb:1.2.5" sample_rate="4000000" gain="50" /&gt;
+&lt;!-- PlutoSDR (Ethernet firmware, dual RX) --&gt;
+&lt;sdr driver="plutosdr" uri="ip:192.168.1.253" sample_rate="10000000" gain="50" channels="0,1" /&gt;
+&lt;!-- PlutoSDR (USB fallback, single RX) --&gt;
+&lt;sdr driver="plutosdr" uri="usb:" sample_rate="4000000" gain="50" /&gt;
 
 &lt;!-- LimeSDR Mini 2 --&gt;
 &lt;sdr driver="lime" serial="0009072C028A2F" sample_rate="10000000" gain="40" /&gt;
