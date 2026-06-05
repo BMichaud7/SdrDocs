@@ -263,7 +263,7 @@ ORDER BY ts_ms DESC LIMIT 20;</code></pre>
 <tr><td>HackRF One</td><td>1 MHz – 6 GHz</td><td>20 MHz</td><td><code>driver=hackrf</code></td><td>Wide range, half-duplex. Good for wideband spectrum survey.</td></tr>
 <tr><td>LimeSDR Mini 2.0</td><td>10 MHz – 3.5 GHz</td><td>40 MHz</td><td><code>driver=lime</code></td><td>Full-duplex, 2 RX channels — supports independent-LO DF mode.</td></tr>
 <tr><td>USRP B210</td><td>70 MHz – 6 GHz</td><td>56 MHz (2ch)</td><td><code>driver=uhd,type=b200</code></td><td>2 coherent RX channels ideal for direction finding. GPS-DO option.</td></tr>
-<tr><td>ADALM-PLUTO</td><td>70 MHz – 6 GHz†</td><td>20 MHz</td><td><code>driver=plutosdr,uri=ip:192.168.2.1</code></td><td>† Extended range needs firmware unlock. USB or Ethernet.</td></tr>
+<tr><td>ADALM-PLUTO</td><td>70 MHz – 6 GHz†</td><td>20 MHz</td><td><code>driver=plutosdr,uri=ip:192.168.2.1</code></td><td>† Extended range + dual RX (2T2R) needs firmware unlock. Ethernet firmware removes USB bandwidth bottleneck — both channels run at full rate. Coherent dual RX suitable for MUSIC direction finding.</td></tr>
 <tr><td>Airspy HF+ Discovery</td><td>9 kHz – 260 MHz</td><td>10 MHz</td><td><code>driver=airspyhf</code></td><td>Exceptional HF/VHF dynamic range. Best for shortwave/AM/SSB.</td></tr>
 <tr><td>SDRplay RSP1A</td><td>1 kHz – 2 GHz</td><td>10 MHz</td><td><code>driver=sdrplay</code></td><td>Selectable HF bands, 12-bit ADC. Good all-rounder.</td></tr>
 <tr><td>BladeRF xA4</td><td>47 MHz – 6 GHz</td><td>56 MHz</td><td><code>driver=bladerf</code></td><td>FPGA-accelerated. Full-duplex. 2 coherent RX.</td></tr>
@@ -404,7 +404,24 @@ ORDER BY ts_ms DESC LIMIT 20;</code></pre>
   <span class="badge badge-cpp">C++20</span>
   <span class="badge badge-ok">64 tests ✓</span>
 </div>
-<p>Continuous spectrum scanner. Submits frequency-sweep tasks to the Resource Manager, receives CF32 IQ over UDP, runs a four-stage signal detection pipeline, and publishes every confirmed detection to <code>rf.detections</code>. Detections persist to PostgreSQL. Also handles P25 voice channel following when grants arrive on <code>rf.p25.grants</code>.</p>
+<p>Continuous spectrum scanner. One process per host — manages all SDR devices on that machine. At startup it queries SdrResourceManager for the number of online devices, then auto-splits the configured frequency bands into equal slices so every device covers a unique non-overlapping range. Submits frequency-sweep tasks to SdrRM, receives CF32 IQ over UDP, runs a four-stage detection pipeline, and publishes every confirmed detection to <code>rf.detections</code>. Also handles P25 voice channel following when grants arrive on <code>rf.p25.grants</code>.</p>
+
+<h4>Multi-device auto-split</h4>
+<p>Configure one or more <code>&lt;band&gt;</code> entries in <code>scanner.xml</code>. On startup AcquisitionApp sends a <code>HEALTH_QUERY</code> to SdrRM and reads <code>controller.num_devices_online</code>. If devices &gt; bands, each band is subdivided into equal frequency slices — one per device — so the full spectrum is covered with no overlap and no manual device assignment:</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Bands configured</th><th>Devices online</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>4</td><td>Band split into 4 equal slices → 4 scanners, 4 devices</td></tr>
+<tr><td>2</td><td>4</td><td>Each band split into 2 slices → 4 scanners, 4 devices</td></tr>
+<tr><td>3</td><td>4</td><td>Band 0 → 2 slices, bands 1–2 → 1 slice each → 4 scanners</td></tr>
+<tr><td>4</td><td>4</td><td>1:1, no split → 4 scanners, 4 devices</td></tr>
+</tbody>
+</table>
+</div>
+
+<h4>Sweep resume after preemption</h4>
+<p>Each scanner tracks <code>resume_hz_</code> — updated on every received UDP packet. When a higher-rank task (AnalysisApp rank 2, DfApp rank 3) preempts the scan, streaming stops and the scanner re-submits. The new task's dwell entry list starts from <code>resume_hz_</code>, wraps through <code>stop_hz</code>, then continues from <code>start_hz</code> to <code>resume_hz_</code> — guaranteeing every frequency is visited exactly once per task regardless of where the previous task was interrupted. No frequency starves.</p>
 
 <h4>Detection pipeline</h4>
 <div class="pipeline">
@@ -464,6 +481,8 @@ CREATE VIEW recent_signals AS
 
 <div class="results">
   <div class="rrow"><span class="rl">Sweep throughput</span><span class="rv">~7.6 s / 920 MHz at 20 MSPS, 4096-point FFT, 50% overlap, 8× Welch averaging</span></div>
+  <div class="rrow"><span class="rl">Multi-device</span><span class="rv">Auto-splits bands across all online devices — 4 PlutoSDRs cover 4× the spectrum with one AcquisitionApp process</span></div>
+  <div class="rrow"><span class="rl">Preemption resume</span><span class="rv">Tracks resume_hz_ per scanner — re-submissions start from last received dwell, no frequency starves</span></div>
   <div class="rrow"><span class="rl">Minimum detectable signal</span><span class="rv">−98 dBm, PAPR ≥ 3 dB — reliably detected in live hardware tests at 400–2000 MHz</span></div>
   <div class="rrow"><span class="rl">Frequency accuracy</span><span class="rv">±1–2 kHz with sub-bin parabolic interpolation at typical sample rates</span></div>
   <div class="rrow"><span class="rl">IQ snapshot size</span><span class="rv">1024 CF32 samples = 8 KB per detection. Sufficient for ONNX fast-path classification without SDR re-acquisition.</span></div>
