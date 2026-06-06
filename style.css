@@ -496,16 +496,82 @@ pre:hover .copy-btn { opacity: 1 }
 .rv.r { color: var(--red) !important }
 .rv.o { color: var(--orange) !important }
 
-/* ── Responsive ── */
+/* ── Mobile nav toggle button & backdrop (hidden on desktop) ── */
+#nav-toggle {
+  display: none;
+  position: fixed; top: .65rem; left: .65rem; z-index: 400;
+  width: 2.2rem; height: 2.2rem;
+  background: var(--bg2); border: 1px solid var(--bd2); border-radius: 6px;
+  color: var(--tx); font-size: 1.1rem; line-height: 1; cursor: pointer;
+  align-items: center; justify-content: center;
+  transition: border-color .12s, color .12s;
+}
+#nav-toggle:hover { border-color: var(--blue); color: var(--blue) }
+#nav-backdrop {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.55); z-index: 299;
+}
+#nav-backdrop.open { display: block }
+
+/* ── Responsive — tablet / mobile ── */
 @media (max-width: 900px) {
+  /* Show hamburger */
+  #nav-toggle { display: flex }
+
+  /* Slide-in drawer (replaces horizontal strip) */
+  #nav {
+    position: fixed; top: 0; left: 0;
+    width: min(280px, 85vw); height: 100vh;
+    border-right: 1px solid var(--bd); border-bottom: none;
+    padding: 1rem 0 3rem;
+    flex-direction: column; flex-wrap: nowrap;
+    overflow-y: auto; overflow-x: hidden;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+  }
+  #nav.open { transform: translateX(0) }
+
+  /* Restore items that were hidden in the old horizontal-nav layout */
+  .nav-logo { display: flex }
+  .nav-sep  { display: block }
+  #nav a {
+    padding: .45rem 1rem;
+    border-left: 2px solid transparent; border-bottom: none;
+    white-space: normal;
+  }
+  #nav a.active { border-left-color: var(--blue); border-bottom: none }
+
+  /* Content — remove sidebar offset, tighten padding */
   header, main, footer { margin-left: 0; padding: 1.5rem }
-  #nav { position: relative; width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--bd); padding: .5rem 0; flex-direction: row; flex-wrap: wrap; overflow-x: auto }
-  .nav-logo { display: none }
-  .nav-sep { display: none }
-  #nav a { padding: .3rem .75rem; border-left: none; border-bottom: 2px solid transparent; white-space: nowrap }
-  #nav a.active { border-bottom-color: var(--blue); border-left: none }
+  header { padding-top: 3.5rem }   /* clear the fixed hamburger button */
+
+  /* Lock scroll behind open drawer */
+  body.nav-is-open { overflow: hidden }
+
+  /* Collapse multi-column layouts */
   .feat-grid, .two-col, .deploy-grid { grid-template-columns: 1fr }
   .pipeline, .p25flow { flex-direction: column }
   .arch-row { flex-direction: column }
   .stat-row { gap: 1.2rem }
+
+  /* Results rows: stack label above value */
+  .rrow { flex-wrap: wrap; gap: .2rem }
+  .rl   { min-width: unset; width: 100%; font-weight: 600 }
+}
+
+/* ── Responsive — small phones ── */
+@media (max-width: 600px) {
+  header, main, footer { padding: 1rem }
+  header { padding-top: 3.5rem }
+  .hdr-top { flex-direction: column; gap: .8rem }
+  .hdr-top h1 { font-size: 1.65rem }
+  .stat-n { font-size: 1.3rem }
+  .stat-row { gap: .75rem }
+  .hdr-meta { gap: .35rem }
+  .tag { font-size: .7rem; padding: .18rem .5rem }
+  pre code { font-size: .77rem }
+  .pgrid { grid-template-columns: 1fr }
+  .acc-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) }
+  .arch-box { min-width: unset }
+  .ps { min-width: unset }
 }

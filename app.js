@@ -633,6 +633,44 @@ document.addEventListener('keydown', e => {
   if (e.key === 'g' && !e.ctrlKey && !e.metaKey) window.open('https://github.com/OpenRFStack','_blank');
 });
 
+// ── Mobile nav hamburger ──────────────────────────────────────────────────────
+function initNavToggle() {
+  const nav = document.getElementById('nav');
+  if (!nav) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'nav-toggle';
+  btn.setAttribute('aria-label', 'Open navigation');
+  btn.textContent = '☰';
+  document.body.insertBefore(btn, document.body.firstChild);
+
+  const backdrop = document.createElement('div');
+  backdrop.id = 'nav-backdrop';
+  document.body.appendChild(backdrop);
+
+  function openNav() {
+    nav.classList.add('open');
+    backdrop.classList.add('open');
+    document.body.classList.add('nav-is-open');
+    btn.setAttribute('aria-label', 'Close navigation');
+    btn.textContent = '✕';
+  }
+  function closeNav() {
+    nav.classList.remove('open');
+    backdrop.classList.remove('open');
+    document.body.classList.remove('nav-is-open');
+    btn.setAttribute('aria-label', 'Open navigation');
+    btn.textContent = '☰';
+  }
+
+  btn.addEventListener('click', () => nav.classList.contains('open') ? closeNav() : openNav());
+  backdrop.addEventListener('click', closeNav);
+
+  nav.querySelectorAll('a').forEach(a => a.addEventListener('click', () => {
+    if (window.innerWidth <= 900) closeNav();
+  }));
+}
+
 window.addEventListener('scroll', setActive, { passive: true });
 window.addEventListener('load', () => {
   setActive();
@@ -642,5 +680,6 @@ window.addEventListener('load', () => {
   initTheme();
   initCopyButtons();
   initFreqChart();
+  initNavToggle();
 });
 setActive();
