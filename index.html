@@ -178,76 +178,63 @@
 <!-- ══════════════════════════════════════ QUICK START -->
 <section id="qs">
 <h2>Quick Start</h2>
-<div class="steps">
-  <div class="step">
-    <div class="sn">1</div>
-    <div class="sb">
-      <h3>Clone SdrScripts</h3>
-      <pre><code class="language-bash">git clone https://github.com/OpenRFStack/SdrScripts
-cd SdrScripts</code></pre>
-    </div>
-  </div>
-  <div class="step">
-    <div class="sn">2</div>
-    <div class="sb">
-      <h3>Configure your SDR device</h3>
-      <p>Edit <code>hw-test/devices-direct.xml</code> with your SoapySDR driver string. The <code>caps</code> block tells the scheduler what the device can do — if a task requests a frequency outside this range the Resource Manager will reject it before even touching the hardware.</p>
-      <pre><code class="language-xml">&lt;device&gt;
-  &lt;id&gt;sdr-0&lt;/id&gt;
-  &lt;driver&gt;rtlsdr&lt;/driver&gt;        &lt;!-- hackrf / lime / uhd / plutosdr / airspyhf / sdrplay --&gt;
-  &lt;caps&gt;
-    &lt;freq_min_hz&gt;500000&lt;/freq_min_hz&gt;
-    &lt;freq_max_hz&gt;1700000000&lt;/freq_max_hz&gt;
-    &lt;sample_rate_max_sps&gt;3200000&lt;/sample_rate_max_sps&gt;
-    &lt;num_rx&gt;1&lt;/num_rx&gt;
-  &lt;/caps&gt;
-&lt;/device&gt;</code></pre>
-      <p>For a multi-device setup add additional <code>&lt;device&gt;</code> blocks. The Resource Manager will schedule across all of them and handle independent-LO or shared-LO allocation automatically.</p>
-    </div>
-  </div>
-  <div class="step">
-    <div class="sn">3</div>
-    <div class="sb">
-      <h3>Start the stack</h3>
-      <pre><code class="language-bash"># Acquisition + broker only — lightest config
-./scan.sh --hw --no-analysis
+<p>Pre-built images are published to <code>ghcr.io/openrfstack</code>. No source checkout or compilation required — the entrypoint downloads SDR binaries from GitHub Releases on first boot.</p>
 
-# With classification (36-class AMR)
-./scan.sh --hw
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1rem;margin:1.2rem 0 1rem">
 
-# Add demodulation (all 25+ protocol decoders)
-./scan.sh --hw --demod
-
-# Full pipeline — classify, demodulate, direction-find
-./scan.sh --hw --demod --df</code></pre>
-      <p>scan.sh pulls container images, starts Artemis, starts all selected components in order, and purges stale AMQP task queues from any previous run. All containers are managed by Podman; no Docker daemon required.</p>
+  <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden">
+    <div style="padding:.5rem 1rem;background:var(--bg3);border-bottom:1px solid var(--bd);font-size:.78rem;font-weight:600;color:#fff;display:flex;align-items:center;gap:.5rem">
+      <span style="color:var(--blue)">📡</span> sdr-node
+      <span style="margin-left:auto;font-weight:400;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:.7rem">Full stack — all services</span>
     </div>
+<pre style="margin:0;border:none;border-radius:0"><code><span style="color:var(--muted)"># Authenticate once (GitHub PAT with read:packages)</span>
+cat ~/.config/openrfstack/ghcr_token | \
+  sudo podman login ghcr.io -u USERNAME --password-stdin
+
+sudo podman run -d \
+  --name sdr-node --network host --privileged \
+  -v sdr-k3s:/var/lib/rancher/k3s \
+  -v /dev/bus/usb:/dev/bus/usb \
+  ghcr.io/openrfstack/openrfstack-node:latest</code></pre>
   </div>
-  <div class="step">
-    <div class="sn">4</div>
-    <div class="sb">
-      <h3>Query live results</h3>
-      <pre><code class="language-sql">-- All signals seen in the last 10 minutes
+
+  <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden">
+    <div style="padding:.5rem 1rem;background:var(--bg3);border-bottom:1px solid var(--bd);font-size:.78rem;font-weight:600;color:#fff;display:flex;align-items:center;gap:.5rem">
+      <span style="color:var(--teal)">🛰</span> sdr-mobile
+      <span style="margin-left:auto;font-weight:400;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:.7rem">Drone / embedded</span>
+    </div>
+<pre style="margin:0;border:none;border-radius:0"><code>sudo podman run -d \
+  --name sdr-mobile --network host --privileged \
+  -v sdr-mobile-k3s:/var/lib/rancher/k3s \
+  -v /dev/bus/usb:/dev/bus/usb \
+  -v /dev/ttyACM0:/dev/ttyACM0 \
+  ghcr.io/openrfstack/openrfstack-mobile:latest
+<span style="color:var(--muted)"># k3s on port 6444 — coexists with sdr-node on same host</span></code></pre>
+  </div>
+
+</div>
+
+<div style="background:var(--bg3);border:1px solid var(--bd2);border-left:3px solid var(--blue);border-radius:var(--r);padding:.75rem 1rem;font-size:.83rem;color:var(--muted);margin-bottom:1.5rem">
+  PlutoSDR: leave <code>&lt;uri&gt;&lt;/uri&gt;</code> empty in devices.xml for USB auto-discovery. For Ethernet: <code>&lt;uri&gt;ip:192.168.2.1&lt;/uri&gt;</code>. Full options, GPS passthrough, and devices.xml reference: <a href="deploy.html">Deployment Guide</a>.
+</div>
+
+<h3 style="font-size:.85rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.75rem">Query live results</h3>
+<pre><code class="language-sql">-- All signals seen in the last 10 minutes
 SELECT last_seen, round(freq_mhz::numeric,4) AS freq_mhz,
        round(bw_khz::numeric,1) AS bw_khz, modulation,
        round(hyp_conf::numeric,2) AS conf, hits
-FROM recent_signals
-ORDER BY last_seen DESC;
+FROM recent_signals ORDER BY last_seen DESC;
 
 -- P25 channel activity with encryption info
 SELECT role, round(freq_mhz::numeric,4) AS freq_mhz,
-       talk_group, encrypted, alg_name, key_id, grant_count, last_seen
-FROM p25_site_channels
-ORDER BY role, freq_mhz;
+       talk_group, encrypted, alg_name, key_id, last_seen
+FROM p25_site_channels ORDER BY role, freq_mhz;
 
 -- Recent voice transcriptions
 SELECT ts_utc, round(freq_hz/1e6::numeric,4) AS freq_mhz,
        modulation, language, text
-FROM transcripts
-ORDER BY ts_ms DESC LIMIT 20;</code></pre>
-    </div>
-  </div>
-</div>
+FROM transcripts ORDER BY ts_ms DESC LIMIT 20;</code></pre>
+
 </section>
 
 <!-- ══════════════════════════════════════ HARDWARE -->
