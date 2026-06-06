@@ -574,4 +574,15 @@ pre:hover .copy-btn { opacity: 1 }
   .acc-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) }
   .arch-box { min-width: unset }
   .ps { min-width: unset }
+  .ab-label { min-width: unset }
+  .footer-links { flex-direction: column; gap: .75rem }
+  .two-col, .feat-grid, .deploy-grid { grid-template-columns: 1fr }
+  h2 { font-size: 1.25rem }
+  h3 { font-size: .95rem }
+}
+
+/* ── Prevent horizontal overflow globally on mobile ── */
+@media (max-width: 900px) {
+  html, body { overflow-x: hidden }
+  main { max-width: 100vw }
 }

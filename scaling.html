@@ -136,7 +136,7 @@
 <p class="section-label" id="rules">Per-Component Scaling Rules</p>
 
 <div class="rules-wrap">
-<table class="rules-table">
+<div class="table-wrap"><table class="rules-table">
   <thead>
     <tr>
       <th>Component</th>
@@ -204,7 +204,7 @@
       <td class="note">Alert insert rate is low (tens/minute). PostgreSQL is not a bottleneck. Add a read replica only if Grafana/dashboard queries slow down the primary.</td>
     </tr>
   </tbody>
-</table>
+</table></div>
 </div>
 
 <!-- Deployment tiers -->
@@ -358,7 +358,7 @@
 
 <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem;line-height:1.7">All components communicate exclusively via Apache Artemis AMQP 1.0. Multiple instances of the same component share a queue — Artemis distributes messages round-robin (anycast). This means scaling is usually a matter of adding more instances without any configuration change.</p>
 
-<table class="amqp-table">
+<div class="table-wrap"><table class="amqp-table">
   <thead>
     <tr><th>AMQP Address</th><th>Producer</th><th>Consumer(s)</th><th>Routing</th><th>Notes</th></tr>
   </thead>
@@ -413,7 +413,7 @@
       <td style="font-size:.77rem;color:var(--muted)">Direction-finding bearing estimates published for each detection event. Low volume, not a scaling concern.</td>
     </tr>
   </tbody>
-</table>
+</table></div>
 
 <div class="tip-box">
   <strong>Anycast = free horizontal scaling.</strong> To double AnalysisApp throughput, start a second instance pointed at the same broker — no config changes needed. Artemis splits the <code>classify.requests</code> queue between both consumers automatically. Same applies to DemodApp and SpeechApp.
