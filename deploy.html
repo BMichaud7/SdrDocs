@@ -60,6 +60,7 @@ pre.code-block {
   <a class="nav-logo" href="index.html"><span>📡</span> Open RF Stack</a>
   <div class="nav-sep">Deployment Guide</div>
   <a href="#prereqs">Prerequisites</a>
+  <a href="#prebuilt">Pre-built Images</a>
   <a href="#docker">Docker Compose</a>
   <a href="#k8s">Kubernetes</a>
   <a href="#config">Configuration</a>
@@ -78,13 +79,14 @@ pre.code-block {
       <div class="logo-wrap">🚀</div>
       <div>
         <h1>Deployment Guide</h1>
-        <p>Step-by-step setup for Open RF Stack from bare metal to Docker Compose to Kubernetes — including SDR USB passthrough, AMQP broker, PostgreSQL, and GPU access.</p>
+        <p>Step-by-step setup for Open RF Stack — from pre-built GHCR container images to Docker Compose to Kubernetes — including SDR USB passthrough, AMQP broker, PostgreSQL, and GPU access.</p>
       </div>
     </div>
     <div class="hdr-meta">
+      <span class="tag">Pre-built Images</span>
       <span class="tag">Docker Compose</span>
       <span class="tag">Kubernetes / k3s</span>
-      <span class="tag">Ubuntu 22.04</span>
+      <span class="tag">Podman / Docker</span>
     </div>
   </div>
 </header>
@@ -139,6 +141,105 @@ pre.code-block {
 
 <span class="code-comment"># Verify GPU is accessible from Docker</span>
 <span class="code-cmd">docker run --rm --gpus all nvidia/cuda:12.2-base-ubuntu22.04 nvidia-smi</span></pre>
+
+<!-- Pre-built Containers -->
+<p class="section-label" id="prebuilt">Pre-built Container Images</p>
+
+<div class="note-box">
+  <strong>Fastest path to production.</strong> Pre-built images for both node types are published to GitHub Container Registry (<code>ghcr.io/openrfstack</code>). No source checkout or compilation required — the entrypoint downloads SDR binaries from GitHub Releases on first boot and self-updates on restart.
+</div>
+
+<div class="step-list">
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <h3>Authenticate to GHCR</h3>
+      <p>Images are private. Pull requires a GitHub PAT with <code>read:packages</code> scope. Store the token somewhere safe (e.g. <code>~/.config/openrfstack/ghcr_token</code>, chmod 600) then log in:</p>
+<pre class="code-block"><span class="code-cmd">cat ~/.config/openrfstack/ghcr_token | sudo podman login ghcr.io -u YOUR_GH_USERNAME --password-stdin</span>
+<span class="code-comment"># Works identically with docker login ghcr.io</span></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <h3>Run sdr-node (fixed-site deployment)</h3>
+      <p>Runs SdrResourceManager, AcquisitionApp, DemodApp, AnalysisApp, SpeechApp, and all infrastructure (Artemis, PostgreSQL) inside an embedded k3s cluster. k3s API listens on port <strong>6443</strong>.</p>
+<pre class="code-block"><span class="code-cmd">sudo podman run -d \
+  --name sdr-node \
+  --network host \
+  --privileged \
+  -v sdr-k3s:/var/lib/rancher/k3s \
+  -v /dev/bus/usb:/dev/bus/usb \
+  ghcr.io/openrfstack/openrfstack-node:latest</span>
+
+<span class="code-comment"># Follow startup logs:</span>
+<span class="code-cmd">sudo podman logs -f sdr-node</span></pre>
+      <div class="note-box">USB SDR access requires <code>--privileged</code> and host udev rules set before container start. See Common Issues → SoapySDR device not found.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <h3>Run sdr-mobile (drone / embedded)</h3>
+      <p>Lightweight variant: SdrResourceManager, AcquisitionApp, and GpsApp only — no AnalysisApp or DemodApp. Designed to coexist on the same host as sdr-node; its k3s API uses port <strong>6444</strong> by default.</p>
+<pre class="code-block"><span class="code-cmd">sudo podman run -d \
+  --name sdr-mobile \
+  --network host \
+  --privileged \
+  -v sdr-mobile-k3s:/var/lib/rancher/k3s \
+  -v /dev/bus/usb:/dev/bus/usb \
+  -v /dev/ttyACM0:/dev/ttyACM0 \
+  ghcr.io/openrfstack/openrfstack-mobile:latest</span>
+
+<span class="code-comment"># GPS serial mount is optional — omit if no GPS attached</span>
+<span class="code-comment"># To run mobile standalone on 6443: add -e K3S_HTTPS_PORT=6443</span>
+<span class="code-comment"># To run both on the same host simultaneously, no extra flags needed</span></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <h3>Override devices.xml (SDR hardware config)</h3>
+      <p>Both images ship a default <code>devices.xml</code> configured for PlutoSDR with auto-discovery (empty <code>&lt;uri&gt;</code>). Mount a custom config at runtime to change SDR type or address:</p>
+<pre class="code-block"><span class="code-comment"># Bind-mount your own devices.xml</span>
+<span class="code-cmd">sudo podman run -d --name sdr-node --network host --privileged \
+  -v sdr-k3s:/var/lib/rancher/k3s \
+  -v /dev/bus/usb:/dev/bus/usb \
+  -v /etc/sdr/devices.xml:/etc/sdr/devices.xml:ro \
+  ghcr.io/openrfstack/openrfstack-node:latest</span>
+
+<span class="code-comment">&lt;!-- devices.xml URI field — three valid forms: --&gt;</span>
+&lt;<span class="code-key">device</span> id=<span class="code-val">"pluto-0"</span>&gt;
+  &lt;<span class="code-key">driver</span>&gt;plutosdr&lt;/<span class="code-key">driver</span>&gt;
+  &lt;<span class="code-key">uri</span>&gt;&lt;/<span class="code-key">uri</span>&gt;                  <span class="code-comment">&lt;!-- empty  → USB auto-discovery (recommended) --&gt;</span>
+  <span class="code-comment">&lt;!-- &lt;uri&gt;ip:192.168.2.1&lt;/uri&gt;  → Ethernet-connected PlutoSDR          --&gt;</span>
+  <span class="code-comment">&lt;!-- &lt;uri&gt;usb:1.7.5&lt;/uri&gt;       → specific USB bus.port.device          --&gt;</span>
+&lt;/<span class="code-key">device</span>&gt;</pre>
+      <div class="warn-box"><strong>Do not</strong> set <code>&lt;uri&gt;driver=plutosdr&lt;/uri&gt;</code>. That is a SoapySDR arg string, not a libiio URI — SoapyPlutoSDR will reject it and fail to open the device.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <h3>GPS serial passthrough (sdr-mobile)</h3>
+      <p>GpsApp reads NMEA sentences directly from a serial port inside the container — no host gpsd needed. Find your GPS device node and bind-mount it:</p>
+<pre class="code-block"><span class="code-cmd">ls /dev/ttyACM* /dev/ttyUSB*</span>   <span class="code-comment"># identify the GPS port</span>
+
+<span class="code-comment"># Pass it in at launch (remap to /dev/ttyACM0 if different)</span>
+<span class="code-cmd">sudo podman run -d --name sdr-mobile --network host --privileged \
+  -v sdr-mobile-k3s:/var/lib/rancher/k3s \
+  -v /dev/bus/usb:/dev/bus/usb \
+  -v /dev/ttyUSB0:/dev/ttyACM0 \
+  ghcr.io/openrfstack/openrfstack-mobile:latest</span></pre>
+    </div>
+  </div>
+
+</div>
 
 <!-- Docker Compose -->
 <p class="section-label" id="docker">Docker Compose Setup</p>
@@ -443,8 +544,8 @@ sudo udevadm control --reload-rules</span></pre>
   <div class="step">
     <div class="step-num" style="background:var(--red)">!</div>
     <div class="step-body">
-      <h3>PlutoSDR: sample drops at high rates</h3>
-      <p>PlutoSDR with Ethernet firmware: connect via <code>ip:192.168.x.x</code> — no USB bandwidth limit, both RX channels run at full rate. For USB-only PlutoSDR: limit <code>sample_rate_sps</code> to 4000000 in scanner.xml. In containers use host networking (<code>--network host</code>) or fall back to <code>uri=usb:</code> as the IP driver may not route through container NAT.</p>
+      <h3>PlutoSDR: device not found / sample drops</h3>
+      <p>Leave <code>&lt;uri&gt;&lt;/uri&gt;</code> empty in devices.xml — SoapyPlutoSDR then auto-discovers via USB scan. The <code>&lt;uri&gt;</code> field is a <strong>libiio</strong> URI (<code>ip:192.168.2.1</code> or <code>usb:1.7.5</code>), not a SoapySDR driver hint; setting it to <code>driver=plutosdr</code> will cause <em>"no device context found"</em>. For Ethernet-connected PlutoSDR use <code>&lt;uri&gt;ip:192.168.2.1&lt;/uri&gt;</code> — no USB bandwidth limit, both RX channels at full rate. For USB-only: leave empty or pin to a specific bus/port with <code>usb:1.7.5</code> (find with <code>SoapySDRUtil --find=driver=plutosdr</code>). Always use <code>--network host</code> in containers so libiio USB contexts resolve correctly. Limit <code>sample_rate_sps</code> to 4&nbsp;000&nbsp;000 for USB-only PlutoSDR to avoid USB bandwidth drops.</p>
     </div>
   </div>
 
