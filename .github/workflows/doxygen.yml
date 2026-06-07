@@ -1,0 +1,118 @@
+name: Generate Doxygen Docs
+
+on:
+  push:
+    branches: ["main/1.0"]
+  workflow_dispatch:
+
+jobs:
+  doxygen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Doxygen
+        run: sudo apt-get install -y --no-install-recommends doxygen
+
+      - name: Set up SSH deploy key
+        env:
+          DEPLOY_KEY: ${{ secrets.DOCS_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p 21098 bmichaud.com >> ~/.ssh/known_hosts 2>/dev/null
+
+      # ── Core Infrastructure ───────────────────────────────────────────────
+
+      - uses: actions/checkout@v4
+        with: { repository: OpenRFStack/SdrResourceManager, path: SdrResourceManager }
+      - name: Doxygen SdrResourceManager
+        run: |
+          cd SdrResourceManager && doxygen Doxyfile
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p 21098 -o StrictHostKeyChecking=no" \
+            docs/html/ bmicmqfq@bmichaud.com:~/public_html/Sdr/docs/SdrResourceManager/
+
+      - uses: actions/checkout@v4
+        with: { repository: OpenRFStack/SdrTaskApi, path: SdrTaskApi }
+      - name: Doxygen SdrTaskApi
+        run: |
+          cd SdrTaskApi && doxygen Doxyfile
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p 21098 -o StrictHostKeyChecking=no" \
+            docs/html/ bmicmqfq@bmichaud.com:~/public_html/Sdr/docs/SdrTaskApi/
+
+      # ── Applications ──────────────────────────────────────────────────────
+
+      - uses: actions/checkout@v4
+        with: { repository: OpenRFStack/AcquisitionApp, path: AcquisitionApp }
+      - name: Doxygen AcquisitionApp
+        run: |
+          cd AcquisitionApp && doxygen Doxyfile
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p 21098 -o StrictHostKeyChecking=no" \
+            docs/html/ bmicmqfq@bmichaud.com:~/public_html/Sdr/docs/AcquisitionApp/
+
+      - uses: actions/checkout@v4
+        with: { repository: OpenRFStack/AnalysisApp, path: AnalysisApp }
+      - name: Doxygen AnalysisApp
+        run: |
+          cd AnalysisApp && doxygen Doxyfile
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p 21098 -o StrictHostKeyChecking=no" \
+            docs/html/ bmicmqfq@bmichaud.com:~/public_html/Sdr/docs/AnalysisApp/
+
+      - uses: actions/checkout@v4
+        with: { repository: OpenRFStack/DemodApp, path: DemodApp }
+      - name: Doxygen DemodApp
+        run: |
+          cd DemodApp && doxygen Doxyfile
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p 21098 -o StrictHostKeyChecking=no" \
+            docs/html/ bmicmqfq@bmichaud.com:~/public_html/Sdr/docs/DemodApp/
+
+      - uses: actions/checkout@v4
+        with: { repository: OpenRFStack/DfApp, path: DfApp }
+      - name: Doxygen DfApp
+        run: |
+          cd DfApp && doxygen Doxyfile
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p 21098 -o StrictHostKeyChecking=no" \
+            docs/html/ bmicmqfq@bmichaud.com:~/public_html/Sdr/docs/DfApp/
+
+      - uses: actions/checkout@v4
+        with: { repository: OpenRFStack/SpeechApp, path: SpeechApp }
+      - name: Doxygen SpeechApp
+        run: |
+          cd SpeechApp && doxygen Doxyfile
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p 21098 -o StrictHostKeyChecking=no" \
+            docs/html/ bmicmqfq@bmichaud.com:~/public_html/Sdr/docs/SpeechApp/
+
+      - uses: actions/checkout@v4
+        with: { repository: OpenRFStack/SdrScanner, path: SdrScanner }
+      - name: Doxygen SdrScanner
+        run: |
+          cd SdrScanner && doxygen Doxyfile
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p 21098 -o StrictHostKeyChecking=no" \
+            docs/html/ bmicmqfq@bmichaud.com:~/public_html/Sdr/docs/SdrScanner/
+
+      - uses: actions/checkout@v4
+        with: { repository: OpenRFStack/SdrScripts, path: SdrScripts }
+      - name: Doxygen SdrScripts
+        run: |
+          cd SdrScripts && doxygen Doxyfile
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p 21098 -o StrictHostKeyChecking=no" \
+            docs/html/ bmicmqfq@bmichaud.com:~/public_html/Sdr/docs/SdrScripts/
+
+      # ── Library ───────────────────────────────────────────────────────────
+
+      - uses: actions/checkout@v4
+        with: { repository: OpenRFStack/SdrSdk, path: SdrSdk }
+      - name: Doxygen SdrSdk
+        run: |
+          cd SdrSdk && doxygen Doxyfile
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p 21098 -o StrictHostKeyChecking=no" \
+            docs/html/ bmicmqfq@bmichaud.com:~/public_html/Sdr/docs/SdrSdk/

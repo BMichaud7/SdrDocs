@@ -25,6 +25,7 @@ jobs:
             -e "ssh -i ~/.ssh/deploy_key -p 21098 -o StrictHostKeyChecking=no" \
             --exclude='.git' \
             --exclude='.github' \
+            --filter='protect docs/*/' \
             . \
             bmicmqfq@bmichaud.com:~/public_html/Sdr/
 
