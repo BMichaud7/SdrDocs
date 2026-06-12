@@ -98,7 +98,7 @@
       <div class="stat"><div class="stat-n">25+</div><div class="stat-l">Protocols decoded</div></div>
       <div class="stat"><div class="stat-n">6</div><div class="stat-l">Threat detectors</div></div>
       <div class="stat"><div class="stat-n">47</div><div class="stat-l">Signal classes (ML)</div></div>
-      <div class="stat"><div class="stat-n">74.8%</div><div class="stat-l">Overall ML val_acc</div></div>
+      <div class="stat"><div class="stat-n">69.4%</div><div class="stat-l">Overall ML holdout accuracy</div></div>
       <div class="stat"><div class="stat-n">&lt;2°</div><div class="stat-l">DF bearing accuracy</div></div>
       <div class="stat"><div class="stat-n">All ✓</div><div class="stat-l">CI passing</div></div>
     </div>
@@ -484,7 +484,7 @@ CREATE VIEW recent_signals AS
   <span class="badge badge-cpp">C++20</span>
   <span class="badge badge-ok">33 tests ✓</span>
 </div>
-<p>Automatic modulation recognition (AMR) service. Classifies every detected signal into one of <strong>47 modulation and protocol classes</strong> using a two-path ONNX pipeline. The 47-class RadioResNet achieves val_acc = 0.748 (best epoch 38/40, 40-epoch training run). Includes 11 new protocol-specific classes: FLEX, MDC-1200, DTMF, EAS/SAME, RTTY, P25 Phase 2, ADS-B, DSC, NAVTEX, VDL Mode 2, PSK31.</p>
+<p>Automatic modulation recognition (AMR) service. Classifies every detected signal into one of <strong>47 modulation and protocol classes</strong> using a two-path ONNX pipeline. The current 47-class RadioResNet (v6) achieves 69.4% accuracy on a dedicated holdout set across −10 to +30 dB SNR (see <a href="accuracy.html">Accuracy Charts</a> for the full per-class/per-SNR breakdown). Includes 11 protocol-specific classes added in earlier revisions: FLEX, MDC-1200, DTMF, EAS/SAME, RTTY, P25 Phase 2, ADS-B, DSC, NAVTEX, VDL Mode 2, PSK31.</p>
 
 <div class="two-col">
 <div>
@@ -514,12 +514,12 @@ CREATE VIEW recent_signals AS
 <tr><td>Input</td><td>1024 complex samples → 2×1024 real tensor (I/Q channels)</td></tr>
 <tr><td>Architecture</td><td>8 residual blocks, 128 channels, batch norm, ReLU</td></tr>
 <tr><td>Output</td><td>47-class softmax</td></tr>
-<tr><td>Parameters</td><td>837,000</td></tr>
-<tr><td>Loss function</td><td>Focal loss γ=2 (reduces easy-example weighting, improves rare-class accuracy)</td></tr>
-<tr><td>QAM oversampling</td><td>×2 (QAM classes resampled to compensate for fewer training examples)</td></tr>
-<tr><td>Freq offset</td><td>±0.3% SR residual (realistic post-AFC, vs original ±2% that destroyed constellation structure)</td></tr>
-<tr><td>Training</td><td>40 epochs, batch 512, AdamW, GPU · 1.06M samples · best val_acc = 0.748 (epoch 38)</td></tr>
-<tr><td>ONNX export</td><td>amr_cnn_47class.onnx (3.2 MB) + amr_low_snr_denoised_47class.onnx (4.1 MB, DAE chain)</td></tr>
+<tr><td>Parameters</td><td>~874,000 (8 blocks × 128 channels)</td></tr>
+<tr><td>Loss function</td><td>Focal loss γ=2, label smoothing 0.10 (reduces easy-example weighting, improves rare-class accuracy)</td></tr>
+<tr><td>Hard-class oversampling</td><td>WeightedRandomSampler ×6 on PSK/QAM-family and other persistently weak classes</td></tr>
+<tr><td>Augmentation</td><td>IqAugment: random phase rotation, IQ imbalance, AWGN at 5–40 dB SNR (85% of batches)</td></tr>
+<tr><td>Training</td><td>v6: fine-tuned from v5, no-mixup (mixup found harmful for raw IQ), GPU · holdout accuracy = 0.694</td></tr>
+<tr><td>ONNX export</td><td>amr_cnn_v6_47class.onnx (3.5 MB)</td></tr>
 </tbody>
 </table>
 </div>
@@ -532,8 +532,8 @@ CREATE VIEW recent_signals AS
   <div class="cg-group"><strong>Waveforms</strong><span>CSS · LFM · TONE</span></div>
   <div class="cg-group"><strong>Protocols</strong><span>P25_C4FM · DMR · NXDN · DSTAR · TETRA · AIS · POCSAG · ACARS</span></div>
 </div>
-<h4>47-class model — trained and deployed</h4>
-<p>Training complete. Best val_acc = <strong>0.748</strong> (epoch 38/40). Synthetic training dataset: 1.06M samples across 47 classes, focal loss γ=2, QAM oversampling ×2, 40-epoch GPU training run. Deployed as <code>amr_cnn_47class.onnx</code> (3.2 MB) with a DAE-denoised low-SNR variant (<code>amr_low_snr_denoised_47class.onnx</code>, 4.1 MB).</p>
+<h4>47-class model — trained and deployed (v6)</h4>
+<p>Holdout accuracy = <strong>0.694</strong> (70,500 samples, −10 to +30 dB SNR). Deployed as <code>amr_cnn_v6_47class.onnx</code> (3.5 MB), built with ONNX Runtime GPU (CUDA execution provider) for ~5 ms inference. v6 fixed several synthetic-generator bugs (RRC filter singularity, P25_PHASE2 NaNs, QAM32 constellation, MSK/GMSK modulation index) and removed mixup augmentation, which was found to destabilize training on raw IQ data. A v7 fine-tuning run is in progress targeting the remaining weak classes (PSK/QAM order confusion, high-SNR degradation in P25_C4FM/NXDN/RTTY/4FSK).</p>
 <div class="class-grid">
   <div class="cg-group"><strong>Analog</strong><span>FM_WB · FM_NB · AM_DSB · AM_DSB_SC · AM_SSB_USB · AM_SSB_LSB</span></div>
   <div class="cg-group"><strong>Linear digital</strong><span>BPSK · QPSK · 8PSK · 16PSK · 32PSK · QAM16 · QAM32 · QAM64 · QAM256 · 4ASK · 16ASK</span></div>
@@ -888,69 +888,66 @@ ORDER BY detected_at DESC;</code></pre>
 
 <!-- ══════════════════════════════════════ ML ACCURACY (standalone — nav order matches document order) -->
 <section id="ml-acc">
-<h2>ML Accuracy — 47-Class Model</h2>
-<p>The 47-class RadioResNet achieves <strong>val_acc = 0.748</strong> (74.8%) on held-out synthetic test data at mixed SNR (−10 to +30 dB), trained over 40 epochs with 1.06M samples. This is a +30% increase in class coverage (36 → 47 classes) with only a −3.2pp drop in overall accuracy. The min-class accuracy peaked at 0.125 during training, showing the 11 new protocol classes are well-separated in the feature space.</p>
+<h2>ML Accuracy — 47-Class Model (v6)</h2>
+<p>The 47-class RadioResNet (v6) achieves <strong>69.4% accuracy</strong> on a dedicated holdout set (70,500 samples, −10 to +30 dB SNR). See <a href="accuracy.html">Accuracy Charts</a> for the full interactive per-class and per-SNR breakdown.</p>
 
-<h4>Model progression</h4>
-
-<h4>Per-category accuracy</h4>
+<h4>Per-category accuracy (v6, mixed SNR)</h4>
 <div class="acc-bars">
-  <div class="ab"><span class="ab-label">CSS / LFM / TONE</span><div class="ab-bar"><div class="ab-fill g" data-w="97%"></div></div><span class="ab-pct">≥97%</span></div>
-  <div class="ab"><span class="ab-label">FM_WB / AM_SSB</span><div class="ab-bar"><div class="ab-fill g" data-w="96%"></div></div><span class="ab-pct">~96%</span></div>
-  <div class="ab"><span class="ab-label">OFDM</span><div class="ab-bar"><div class="ab-fill g" data-w="95%"></div></div><span class="ab-pct">~95%</span></div>
-  <div class="ab"><span class="ab-label">FM_NB / AM_DSB</span><div class="ab-bar"><div class="ab-fill g" data-w="91%"></div></div><span class="ab-pct">~91%</span></div>
-  <div class="ab"><span class="ab-label">BPSK / GMSK / MSK</span><div class="ab-bar"><div class="ab-fill g" data-w="88%"></div></div><span class="ab-pct">~88%</span></div>
-  <div class="ab"><span class="ab-label">OOK / FSK variants</span><div class="ab-bar"><div class="ab-fill g" data-w="86%"></div></div><span class="ab-pct">~86%</span></div>
-  <div class="ab"><span class="ab-label">QPSK / 8PSK</span><div class="ab-bar"><div class="ab-fill o" data-w="79%"></div></div><span class="ab-pct">~79%</span></div>
-  <div class="ab"><span class="ab-label">Protocol classes (avg)</span><div class="ab-bar"><div class="ab-fill o" data-w="75%"></div></div><span class="ab-pct">~75%</span></div>
-  <div class="ab"><span class="ab-label">QAM16 / QAM32</span><div class="ab-bar"><div class="ab-fill o" data-w="72%"></div></div><span class="ab-pct">~72%</span></div>
-  <div class="ab"><span class="ab-label">QAM256</span><div class="ab-bar"><div class="ab-fill o" data-w="53%"></div></div><span class="ab-pct">53%</span></div>
-  <div class="ab"><span class="ab-label">QAM64</span><div class="ab-bar"><div class="ab-fill r" data-w="15%"></div></div><span class="ab-pct">~15%</span></div>
+  <div class="ab"><span class="ab-label">AM_DSB / ADS_B / POCSAG</span><div class="ab-bar"><div class="ab-fill g" data-w="97%"></div></div><span class="ab-pct">~97%</span></div>
+  <div class="ab"><span class="ab-label">AM_SSB / DSTAR / LFM</span><div class="ab-bar"><div class="ab-fill g" data-w="95%"></div></div><span class="ab-pct">~95%</span></div>
+  <div class="ab"><span class="ab-label">DMR / NXDN / MDC_1200</span><div class="ab-bar"><div class="ab-fill g" data-w="92%"></div></div><span class="ab-pct">~92%</span></div>
+  <div class="ab"><span class="ab-label">CSS / OFDM / FLEX</span><div class="ab-bar"><div class="ab-fill g" data-w="88%"></div></div><span class="ab-pct">~88%</span></div>
+  <div class="ab"><span class="ab-label">FM_WB / FM_NB / TETRA</span><div class="ab-bar"><div class="ab-fill g" data-w="80%"></div></div><span class="ab-pct">~80%</span></div>
+  <div class="ab"><span class="ab-label">BPSK / DSC / RTTY</span><div class="ab-bar"><div class="ab-fill o" data-w="76%"></div></div><span class="ab-pct">~76%</span></div>
+  <div class="ab"><span class="ab-label">FSK variants / VDL2</span><div class="ab-bar"><div class="ab-fill o" data-w="65%"></div></div><span class="ab-pct">~65%</span></div>
+  <div class="ab"><span class="ab-label">QPSK / TONE / 4FSK</span><div class="ab-bar"><div class="ab-fill o" data-w="48%"></div></div><span class="ab-pct">~48%</span></div>
+  <div class="ab"><span class="ab-label">NAVTEX / 32PSK / QAM16</span><div class="ab-bar"><div class="ab-fill r" data-w="33%"></div></div><span class="ab-pct">~33%</span></div>
+  <div class="ab"><span class="ab-label">QAM32 / 16PSK / QAM64</span><div class="ab-bar"><div class="ab-fill r" data-w="16%"></div></div><span class="ab-pct">~16%</span></div>
 </div>
 
 <div class="acc-grid">
-  <div class="acc g"><div class="an">0.748</div><div class="al">47-class model val_acc — 40 epochs, 1.06M samples (current)</div></div>
-  <div class="acc o"><div class="an">0.780</div><div class="al">36-class model val_acc (previous — 922k samples, 30 epochs)</div></div>
-  <div class="acc o"><div class="an">0.743</div><div class="al">28-class baseline val_acc (original protocol-agnostic model)</div></div>
-  <div class="acc o"><div class="an">0.125</div><div class="al">Peak min-class accuracy in 47-class training (epoch 18)</div></div>
+  <div class="acc g"><div class="an">0.694</div><div class="al">v6 — fine-tuned from v5, generator fixes + no-mixup (current)</div></div>
+  <div class="acc o"><div class="an">0.434</div><div class="al">v6 first attempts — collapsed at epoch 7-9 due to mixup on raw IQ (root-caused, fixed)</div></div>
+  <div class="acc o"><div class="an">0.748</div><div class="al">v1 47-class model val_acc — 40 epochs, 1.06M samples (legacy synthetic eval set)</div></div>
+  <div class="acc o"><div class="an">0.780</div><div class="al">36-class model val_acc (legacy — 922k samples, 30 epochs)</div></div>
 </div>
 
 <div class="callout orange">
-<strong>Why did overall accuracy decrease from 0.780 → 0.748?</strong> Adding 11 new classes (+30% output space) increases competition in the softmax layer. The model now correctly identifies 47 signal types vs 36 — on the original 36-class evaluation set, the 47-class model performs comparably. The min-class accuracy improvement (0.087 → 0.125 peak) shows the new protocol classes are well-separated.
+<strong>Note on the 0.748 → 0.694 numbers:</strong> these are not directly comparable. The v1 figure was measured on a 15% split of the same synthetic generator's training distribution; the v6 figure is measured on a separately-seeded holdout set generated after fixing several generator bugs (RRC filter singularity, P25_PHASE2 NaNs, QAM32 constellation, MSK/GMSK deviation). The v6 holdout is a harder, more realistic test.
 </div>
 
-<h4>What causes misclassification</h4>
+<h4>What causes misclassification (v6)</h4>
 <div class="table-wrap">
 <table>
 <thead><tr><th>Class</th><th>Common confusion</th><th>Root cause</th></tr></thead>
 <tbody>
-<tr><td>QAM64</td><td>QAM32, QAM256</td><td>At low SNR the 64-point constellation clusters with adjacent orders. Focal loss helps but the class boundary is genuinely ambiguous below 10 dB SNR.</td></tr>
-<tr><td>QAM256</td><td>QAM64, OFDM</td><td>256-QAM at −5 dB SNR looks like noise; original ±2% freq offset destroyed all structure. ±0.3% offset + multipath augmentation improved recall from 5% → 53%.</td></tr>
-<tr><td>4FSK</td><td>FSK, GFSK</td><td>Without sufficient samples the 4-level eye diagram partially collapses. 65k-sample slow path resolves most cases.</td></tr>
-<tr><td>DSTAR / NXDN</td><td>Each other, DMR</td><td>All three are 4FSK-family at similar symbol rates. Protocol-specific preamble framing is needed for reliable separation.</td></tr>
+<tr><td>QAM64 / QAM32</td><td>QAM256, QAM16</td><td>Constellation-order ambiguity within the QAM family — persists across all SNRs, not just low SNR.</td></tr>
+<tr><td>16PSK / 32PSK</td><td>8PSK, QPSK</td><td>Same constellation-order ambiguity within the PSK family.</td></tr>
+<tr><td>P25_C4FM / 4FSK</td><td>FM_NB / MSK</td><td>Accuracy collapses at high SNR (+15..+30 dB) — the model rarely saw genuinely clean high-SNR examples during training, since IqAugment always added 5-30 dB noise. Addressed in v7 by raising the noise ceiling to 40 dB.</td></tr>
+<tr><td>RTTY / NAVTEX</td><td>Each other, P25_PHASE2</td><td>Both are slow FSK-based text protocols with similar tone-switching structure.</td></tr>
+<tr><td>NXDN / DSTAR</td><td>Each other, P25_PHASE2</td><td>All are 4FSK-family digital voice protocols at similar symbol rates.</td></tr>
 </tbody>
 </table>
 </div>
 
-<h4>Training pipeline</h4>
-<pre><code class="language-bash"># Generate 47-class synthetic dataset (1.06M samples)
-python tools/ml/generate_v3.py --classes 47 --samples-per-class 22500 \
-  --snr-min -10 --snr-max 30 --out data/synth_v3_47class.npz
+<h4>Training pipeline (v6/v7)</h4>
+<pre><code class="language-bash"># Fine-tune from the previous best checkpoint, no-mixup, hard-class oversampling
+python tools/ml/train.py \
+  --npz data/synth_v6_47class_1024.npz \
+  --val-npz data/v6_holdout_1024.npz \
+  --resume models/amr_cnn_v6_47class.best.pt \
+  --model resnet --channels 128 --n-blocks 8 \
+  --epochs 60 --batch 256 --lr 1e-4 \
+  --focal 2.0 --label-smoothing 0.10 \
+  --augment --no-mixup --boost-hard 6.0 \
+  --max-per-class 15000 --snr-min -10 \
+  --cuda --out models/amr_cnn_v7_47class.onnx
 
-# Generate extra QAM data with heavy multipath augmentation
-python tools/ml/generate_qam.py --out data/qam_heavy.npz
-
-# Train — 40 epochs, focal loss γ=2, QAM oversampling ×2, GPU
-# Result: best val_acc=0.748 at epoch 38
-python tools/ml/train_resnet.py \
-  --data data/synth_v3_47class.npz data/qam_heavy.npz \
-  --epochs 40 --batch 512 --focal-gamma 2 --qam-boost 2 \
-  --cuda --out models/amr_cnn_47class.onnx
-
-# Export low-SNR denoised variant (DAE preprocessing chain)
-python tools/ml/export_denoised.py \
-  --encoder models/amr_cnn_47class.onnx \
-  --out models/amr_low_snr_denoised_47class.onnx</code></pre>
+# Evaluate per-class / per-SNR accuracy on the holdout set
+python tools/ml/eval_holdout.py \
+  --model models/amr_cnn_v7_47class.onnx \
+  --classes models/amr_cnn_v7_47class.classes.json \
+  --holdout data/v6_holdout_1024.npz</code></pre>
 </section>
 
 <!-- ══════════════════════════════════════ DF ACCURACY (standalone) -->

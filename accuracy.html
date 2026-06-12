@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>ML Accuracy Charts — Open RF Stack</title>
-<meta name="description" content="Interactive accuracy charts for the 47-class AMR model: per-SNR, per-class, and class vs SNR breakdown.">
+<meta name="description" content="Interactive accuracy charts for the 47-class AMR model (v6): per-SNR, per-class, and class vs SNR breakdown.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -63,15 +63,15 @@
       <div class="logo-wrap">📊</div>
       <div>
         <h1>ML Accuracy Charts</h1>
-        <p>47-class RadioResNet — measured on held-out test data at 9 SNR levels (−10 to +30 dB). Interactive: hover for values, click legend to toggle classes.</p>
+        <p>47-class RadioResNet (v6) — measured on a dedicated holdout set at 9 SNR levels (−10 to +30 dB). Interactive: hover for values, click legend to toggle classes.</p>
       </div>
     </div>
     <div class="stat-pills">
       <div class="pill"><div class="pill-n">47</div><div class="pill-l">Signal classes</div></div>
-      <div class="pill"><div class="pill-n">74.8%</div><div class="pill-l">Overall val_acc</div></div>
-      <div class="pill"><div class="pill-n">84.4%</div><div class="pill-l">Accuracy at SNR 30 dB</div></div>
-      <div class="pill"><div class="pill-n">2.8%</div><div class="pill-l">Accuracy at SNR −10 dB</div></div>
-      <div class="pill"><div class="pill-n">158k</div><div class="pill-l">Test samples evaluated</div></div>
+      <div class="pill"><div class="pill-n">69.4%</div><div class="pill-l">Overall holdout accuracy</div></div>
+      <div class="pill"><div class="pill-n">83.1%</div><div class="pill-l">Accuracy at SNR +5 dB</div></div>
+      <div class="pill"><div class="pill-n">3.6%</div><div class="pill-l">Accuracy at SNR −10 dB</div></div>
+      <div class="pill"><div class="pill-n">70.5k</div><div class="pill-l">Holdout samples evaluated</div></div>
     </div>
   </div>
 </header>
@@ -81,10 +81,10 @@
 <!-- ── Overall accuracy vs SNR ── -->
 <section id="snr-overall">
 <h2>Overall Accuracy vs SNR</h2>
-<p>Mean per-class accuracy across all 47 signal classes at each SNR level. The model reaches 77% accuracy at SNR = 10 dB and saturates near 85% above 15 dB. Below 0 dB the problem becomes very hard — constellation structure collapses into noise.</p>
+<p>Overall classification accuracy across all 47 signal classes at each SNR level. The model rises sharply from 0 dB (75%) to peak at +5 dB (83%), then settles to a 70-72% plateau from +10 dB up. Below 0 dB the problem becomes very hard — constellation structure collapses into noise.</p>
 <div class="chart-card">
-  <h3>All-class mean accuracy vs SNR</h3>
-  <p>Evaluated on 15% held-out test split — 158,625 samples, seed=42</p>
+  <h3>All-class accuracy vs SNR</h3>
+  <p>Evaluated on a dedicated v6 holdout set — 70,500 samples, seed=3333</p>
   <div class="chart-container" style="height:280px">
     <canvas id="chartSnrOverall"></canvas>
   </div>
@@ -94,7 +94,7 @@
 <!-- ── Per-class accuracy ── -->
 <section id="class-acc">
 <h2>Per-Class Accuracy (all SNRs mixed)</h2>
-<p>Accuracy for each of the 47 signal classes, averaged over all SNR levels from −10 to +30 dB. ADS-B and DTMF score highest due to their distinctive spectral signatures. QAM64, PSK31, P25 Phase 2 and NAVTEX are the hardest — primarily due to overlap with neighbouring classes at low SNR.</p>
+<p>Accuracy for each of the 47 signal classes, averaged over all SNR levels from −10 to +30 dB. LFM, ADS-B, AM_DSB and POCSAG score highest due to their distinctive spectral signatures (chirp sweep, packet preamble, strong carrier, FSK paging tones). QAM64, 16PSK, QAM32, NAVTEX and 32PSK are the hardest — primarily due to constellation-order confusion within the PSK/QAM family.</p>
 
 <div class="chart-card">
   <div class="filter-row" id="classFilterRow">
@@ -132,30 +132,36 @@
 <!-- ── Hard classes ── -->
 <section id="hard-classes">
 <h2>Hard Classes Analysis</h2>
-<p>Classes with accuracy below 20% need targeted improvement in v2 training. The common root causes are constellation overlap (QAM family), insufficient training examples (new protocol classes), and ambiguous spectral shape at the symbol rates used.</p>
+<p>Classes with accuracy below 50% are next in line for targeted improvement. The common root causes are constellation-order overlap within the PSK/QAM family, structural confusion with neighbouring protocol classes, and a training-noise floor that under-represents genuinely clean (+20..+30 dB) signals.</p>
 
 <div class="chart-card">
   <h3>Classes with accuracy &lt; 50%</h3>
-  <p>Sorted by accuracy ascending — these benefit most from v2 improvements (1024-sample input, 4× QAM boost, 2× dataset)</p>
+  <p>Sorted by accuracy ascending</p>
   <div class="chart-container" style="height:260px">
     <canvas id="chartHard"></canvas>
   </div>
 </div>
 
 <div class="results" style="margin-top:1.2rem">
-  <div class="rrow"><span class="rl">QAM64 — 6.6%</span><span class="rv r">Worst class. Constellation is between QAM32 and QAM256 — the model confuses it with both at low SNR. V2 training adds 4× oversampling and 1024-sample context (sees more full symbols).</span></div>
-  <div class="rrow"><span class="rl">PSK31 — 0.0%</span><span class="rv r">31.25 baud — at 512 samples only ~16 symbols captured (not enough for Varicode pattern). 1024 samples doubles to ~32 symbols → should improve significantly.</span></div>
-  <div class="rrow"><span class="rl">P25_PHASE2 — 0.0%</span><span class="rv r">π/4-DQPSK — confused with QPSK at low SNR. Likely needs symbol-rate-aware features or more training examples in the new protocol-class data.</span></div>
-  <div class="rrow"><span class="rl">NAVTEX — 12.2%</span><span class="rv r">100 baud FSK — very slow, only a few symbol transitions visible in 512 samples. 1024 samples should help significantly.</span></div>
-  <div class="rrow"><span class="rl">RTTY — 13.7%</span><span class="rv r">45.45 baud — similar issue to NAVTEX (very slow baud rate). More samples per window = clearer tone switching pattern.</span></div>
-  <div class="rrow"><span class="rl">16PSK — 11.0%</span><span class="rv r">16-point PSK constellation is very close to QAM16 in feature space. A deeper/wider model (256 channels) should better resolve the boundary.</span></div>
+  <div class="rrow"><span class="rl">QAM64 — 12.5%</span><span class="rv r">Worst class. Confused mostly with QAM256 — the model frequently mistakes the denser constellation for a higher-order one, especially at high SNR.</span></div>
+  <div class="rrow"><span class="rl">16PSK — 13.4%</span><span class="rv r">Confused with 8PSK and QPSK — classic PSK-order ambiguity, persists across all SNRs.</span></div>
+  <div class="rrow"><span class="rl">QAM32 — 21.2%</span><span class="rv r">Confused with QAM256 and QAM16 — same constellation-order overlap as QAM64.</span></div>
+  <div class="rrow"><span class="rl">NAVTEX — 31.6%</span><span class="rv r">FSK-based maritime telex — confused with RTTY and P25_PHASE2 at high SNR (similar tone-switching structure).</span></div>
+  <div class="rrow"><span class="rl">32PSK — 33.0%</span><span class="rv r">Confused with QPSK and 8PSK — same PSK-order ambiguity as 16PSK.</span></div>
+  <div class="rrow"><span class="rl">AM_DSB_SC — 37.6%</span><span class="rv r">Suppressed-carrier AM — overlaps with QAM256 and other amplitude-modulated digital signals at low SNR.</span></div>
+  <div class="rrow"><span class="rl">QAM256 — 43.7%</span><span class="rv r">High-order QAM — degrades at very high SNR, likely a training-noise-floor effect (the model rarely saw genuinely clean +30 dB QAM256 examples).</span></div>
+  <div class="rrow"><span class="rl">QPSK — 46.5%</span><span class="rv r">Confused with neighbouring PSK orders, though less severely than 16PSK/32PSK.</span></div>
+  <div class="rrow"><span class="rl">4FSK — 49.8%</span><span class="rv r">Accuracy collapses from 76.5% at 0 dB to ~3% at +15..+30 dB — a strong example of the high-SNR training-noise-floor issue.</span></div>
+  <div class="rrow"><span class="rl">TONE — 49.5%</span><span class="rv r">Single-tone carrier — confused with AM_DSB and OOK, which can look similar without modulation present.</span></div>
 </div>
+
+<p class="note">v7 training (in progress) targets these specific failure modes: <code>IqAugment</code>'s noise ceiling was raised from 30 dB to 40 dB SNR so the model sees more near-clean high-SNR examples (addressing 4FSK/QAM256/P25_C4FM-style high-SNR collapse), and <code>HARD_CLASSES</code> oversampling now also covers P25_C4FM, NXDN, DTMF, GFSK, FSK, TONE, 4FSK and 8FSK.</p>
 </section>
 
 </main>
 
 <footer>
-  <span>Open RF Stack · <a href="https://github.com/OpenRFStack">github.com/OpenRFStack</a> · Model: amr_cnn_47class.onnx · Evaluated on held-out test split</span>
+  <span>Open RF Stack · <a href="https://github.com/OpenRFStack">github.com/OpenRFStack</a> · Model: amr_cnn_v6_47class.onnx · Evaluated on held-out v6 test split</span>
   <div class="footer-links">
     <a href="index.html">Documentation</a>
     <a href="index.html#ml-acc">ML Accuracy Section</a>
@@ -165,40 +171,49 @@
 <script>
 'use strict';
 
-// ── Real measured data from evaluate.py ──────────────────────────────────────
-// Data from evaluate.py on 158,625 held-out test samples (15% split, seed=42)
+// ── Real measured data from eval_holdout.py (model v6) ───────────────────────
+// Data from eval_holdout.py on the v6 holdout set — 70,500 samples, seed=3333
 const DATA = {
   snr_levels: [-10,-5,0,5,10,15,20,25,30],
-  snr_acc: {"-10":2.8,"-5":6.8,"0":31.6,"5":61.4,"10":77.8,"15":82.9,"20":83.8,"25":84.0,"30":84.4},
+  snr_acc: {"-10":3.6,"-5":15.3,"0":74.8,"5":83.1,"10":76.4,"15":72.3,"20":72.0,"25":70.5,"30":70.5},
   class_acc: {
-    "16ASK":66.9,"16PSK":11.4,"32PSK":39.8,"4ASK":71.8,"4FSK":63.1,"8FSK":54.7,
-    "8PSK":52.6,"ACARS":71.3,"ADS_B":93.0,"AIS":66.2,"AM_DSB":64.7,"AM_DSB_SC":74.0,
-    "AM_SSB_LSB":77.7,"AM_SSB_USB":70.4,"BPSK":55.0,"CSS":76.7,"DMR":52.5,"DSC":58.5,
-    "DSTAR":76.5,"DTMF":86.8,"EAS_SAME":75.7,"FLEX":69.1,"FM_NB":64.0,"FM_WB":72.8,
-    "FSK":69.0,"GFSK":68.9,"GMSK":65.5,"LFM":71.8,"MDC_1200":65.5,"MSK":68.0,
-    "NAVTEX":11.2,"NXDN":75.7,"OFDM":56.3,"OOK":60.4,"P25_C4FM":48.0,"P25_PHASE2":0.0,
-    "POCSAG":67.9,"PSK31":0.0,"QAM16":39.0,"QAM256":73.4,"QAM32":32.6,"QAM64":6.9,
-    "QPSK":57.3,"RTTY":15.0,"TETRA":42.0,"TONE":74.7,"VDL2":60.4
+    "16ASK":62.6,"16PSK":13.4,"32PSK":33.0,"4ASK":63.8,"4FSK":49.8,"8FSK":62.4,
+    "8PSK":26.9,"ACARS":76.9,"ADS_B":97.8,"AIS":71.5,"AM_DSB":99.3,"AM_DSB_SC":37.6,
+    "AM_SSB_LSB":96.8,"AM_SSB_USB":93.6,"BPSK":79.2,"CSS":89.5,"DMR":91.8,"DSC":80.0,
+    "DSTAR":96.6,"DTMF":89.7,"EAS_SAME":69.8,"FLEX":86.9,"FM_NB":74.6,"FM_WB":81.7,
+    "FSK":70.5,"GFSK":73.2,"GMSK":60.2,"LFM":94.2,"MDC_1200":91.9,"MSK":66.6,
+    "NAVTEX":31.6,"NXDN":92.6,"OFDM":87.9,"OOK":93.4,"P25_C4FM":71.9,"P25_PHASE2":91.9,
+    "POCSAG":97.8,"PSK31":67.0,"QAM16":45.0,"QAM256":43.7,"QAM32":21.2,"QAM64":12.5,
+    "QPSK":46.5,"RTTY":67.9,"TETRA":85.6,"TONE":49.5,"VDL2":68.4
   },
   class_snr: {
-    "BPSK":     {"-10":0.0,"-5":0.0,"0":0.0,"5":0.3,"10":99.1,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
-    "QPSK":     {"-10":0.0,"-5":0.0,"0":0.0,"5":6.3,"10":99.8,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
-    "8PSK":     {"-10":0.0,"-5":0.0,"0":0.0,"5":0.0,"10":71.7,"15":99.2,"20":100.0,"25":99.7,"30":99.7},
-    "QAM16":    {"-10":0.0,"-5":0.0,"0":0.0,"5":0.0,"10":17.8,"15":73.3,"20":81.7,"25":85.4,"30":86.3},
-    "QAM64":    {"-10":0.0,"-5":34.8,"0":0.0,"5":0.0,"10":1.5,"15":4.2,"20":6.7,"25":8.7,"30":8.8},
-    "QAM256":   {"-10":0.0,"-5":5.5,"0":99.5,"5":100.0,"10":95.1,"15":93.0,"20":89.8,"25":88.0,"30":89.4},
-    "FM_WB":    {"-10":0.0,"-5":0.0,"0":54.4,"5":97.7,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
-    "FM_NB":    {"-10":0.0,"-5":0.0,"0":1.4,"5":82.6,"10":97.7,"15":98.8,"20":99.5,"25":100.0,"30":100.0},
-    "P25_C4FM": {"-10":0.0,"-5":0.0,"0":59.3,"5":51.6,"10":60.3,"15":64.4,"20":67.4,"25":61.2,"30":61.1},
-    "AIS":      {"-10":0.0,"-5":0.3,"0":3.9,"5":96.6,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":98.9},
-    "ADS_B":    {"-10":38.8,"-5":100.0,"0":100.0,"5":100.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
-    "OFDM":     {"-10":0.0,"-5":0.0,"0":0.0,"5":12.7,"10":91.2,"15":98.6,"20":98.7,"25":98.4,"30":97.7},
-    "4FSK":     {"-10":0.0,"-5":0.0,"0":0.8,"5":79.2,"10":99.1,"15":100.0,"20":99.7,"25":100.0,"30":99.7},
-    "GMSK":     {"-10":0.0,"-5":0.0,"0":1.6,"5":90.6,"10":100.0,"15":100.0,"20":99.7,"25":100.0,"30":100.0},
-    "DMR":      {"-10":0.0,"-5":0.0,"0":31.5,"5":67.6,"10":72.6,"15":70.1,"20":82.0,"25":75.2,"30":77.5},
-    "POCSAG":   {"-10":0.0,"-5":0.8,"0":8.3,"5":99.2,"10":100.0,"15":100.0,"20":100.0,"25":99.2,"30":97.8},
-    "CSS":      {"-10":0.0,"-5":0.0,"0":10.0,"5":80.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
-    "LFM":      {"-10":0.0,"-5":0.0,"0":15.0,"5":85.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0}
+    "BPSK":     {"-10":0.0,"-5":0.0,"0":73.5,"5":100.0,"10":100.0,"15":94.1,"20":97.1,"25":97.1,"30":91.2},
+    "QPSK":     {"-10":0.0,"-5":5.9,"0":73.5,"5":100.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
+    "8PSK":     {"-10":0.0,"-5":0.0,"0":17.6,"5":82.4,"10":55.9,"15":52.9,"20":50.0,"25":55.9,"30":44.1},
+    "16PSK":    {"-10":0.0,"-5":0.0,"0":11.8,"5":29.4,"10":11.8,"15":14.7,"20":14.7,"25":8.8,"30":8.8},
+    "32PSK":    {"-10":0.0,"-5":0.0,"0":26.5,"5":38.2,"10":32.4,"15":23.5,"20":26.5,"25":11.8,"30":17.6},
+    "QAM16":    {"-10":0.0,"-5":0.0,"0":50.0,"5":79.4,"10":76.5,"15":61.8,"20":55.9,"25":64.7,"30":55.9},
+    "QAM32":    {"-10":0.0,"-5":0.0,"0":2.9,"5":20.6,"10":8.8,"15":5.9,"20":2.9,"25":0.0,"30":2.9},
+    "QAM64":    {"-10":0.0,"-5":2.9,"0":8.8,"5":23.5,"10":17.6,"15":5.9,"20":8.8,"25":8.8,"30":14.7},
+    "QAM256":   {"-10":0.0,"-5":29.4,"0":88.2,"5":91.2,"10":97.1,"15":88.2,"20":94.1,"25":82.4,"30":85.3},
+    "FM_WB":    {"-10":0.0,"-5":0.0,"0":94.1,"5":100.0,"10":100.0,"15":97.1,"20":94.1,"25":100.0,"30":82.4},
+    "FM_NB":    {"-10":0.0,"-5":11.8,"0":97.1,"5":100.0,"10":100.0,"15":94.1,"20":91.2,"25":91.2,"30":82.4},
+    "P25_C4FM": {"-10":0.0,"-5":2.9,"0":73.5,"5":85.3,"10":20.6,"15":0.0,"20":8.8,"25":0.0,"30":0.0},
+    "NXDN":     {"-10":8.8,"-5":5.9,"0":100.0,"5":91.2,"10":67.6,"15":50.0,"20":38.2,"25":23.5,"30":23.5},
+    "RTTY":     {"-10":0.0,"-5":0.0,"0":26.5,"5":32.4,"10":14.7,"15":8.8,"20":11.8,"25":2.9,"30":0.0},
+    "NAVTEX":   {"-10":0.0,"-5":0.0,"0":67.6,"5":44.1,"10":47.1,"15":52.9,"20":41.2,"25":44.1,"30":50.0},
+    "AM_DSB":   {"-10":0.0,"-5":2.9,"0":88.2,"5":52.9,"10":44.1,"15":26.5,"20":47.1,"25":26.5,"30":17.6},
+    "TONE":     {"-10":0.0,"-5":2.9,"0":55.9,"5":50.0,"10":58.8,"15":52.9,"20":58.8,"25":55.9,"30":47.1},
+    "DTMF":     {"-10":0.0,"-5":0.0,"0":73.5,"5":61.8,"10":50.0,"15":41.2,"20":17.6,"25":26.5,"30":50.0},
+    "AIS":      {"-10":0.0,"-5":64.7,"0":100.0,"5":100.0,"10":100.0,"15":97.1,"20":100.0,"25":100.0,"30":100.0},
+    "ADS_B":    {"-10":0.0,"-5":67.6,"0":100.0,"5":100.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
+    "OFDM":     {"-10":0.0,"-5":0.0,"0":0.0,"5":97.1,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
+    "4FSK":     {"-10":0.0,"-5":0.0,"0":76.5,"5":35.3,"10":11.8,"15":0.0,"20":5.9,"25":2.9,"30":2.9},
+    "GMSK":     {"-10":0.0,"-5":23.5,"0":76.5,"5":97.1,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
+    "DMR":      {"-10":0.0,"-5":0.0,"0":100.0,"5":100.0,"10":100.0,"15":100.0,"20":94.1,"25":100.0,"30":97.1},
+    "POCSAG":   {"-10":0.0,"-5":94.1,"0":100.0,"5":100.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":97.8},
+    "CSS":      {"-10":0.0,"-5":14.7,"0":100.0,"5":100.0,"10":94.1,"15":88.2,"20":85.3,"25":85.3,"30":97.1},
+    "LFM":      {"-10":100.0,"-5":100.0,"0":100.0,"5":100.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0}
   }
 };
 
@@ -304,8 +319,8 @@ document.querySelectorAll('#classFilterRow .filter-btn').forEach(btn => {
 // ── Chart 3: Class vs SNR line chart ─────────────────────────────────────────
 const snrGroups = {
   core: ['BPSK','QPSK','8PSK','FM_WB','FM_NB','GMSK','OFDM','4FSK'],
-  proto: ['AIS','ADS_B','DMR','POCSAG','P25_C4FM','CSS','LFM'],
-  qam: ['QAM16','QAM64','QAM256'],
+  proto: ['AIS','ADS_B','DMR','POCSAG','P25_C4FM','NXDN','RTTY','NAVTEX','CSS','LFM'],
+  qam: ['QAM16','QAM32','QAM64','QAM256','16PSK','32PSK'],
   all: Object.keys(DATA.class_snr)
 };
 
