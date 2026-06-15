@@ -68,10 +68,10 @@
     </div>
     <div class="stat-pills">
       <div class="pill"><div class="pill-n">47</div><div class="pill-l">Signal classes</div></div>
-      <div class="pill"><div class="pill-n">69.4%</div><div class="pill-l">Overall holdout accuracy</div></div>
-      <div class="pill"><div class="pill-n">83.1%</div><div class="pill-l">Accuracy at SNR +5 dB</div></div>
-      <div class="pill"><div class="pill-n">3.6%</div><div class="pill-l">Accuracy at SNR −10 dB</div></div>
-      <div class="pill"><div class="pill-n">70.5k</div><div class="pill-l">Holdout samples evaluated</div></div>
+      <div class="pill"><div class="pill-n">52.7%</div><div class="pill-l">Overall holdout accuracy</div></div>
+      <div class="pill"><div class="pill-n">78.1%</div><div class="pill-l">Accuracy at SNR +5 dB</div></div>
+      <div class="pill"><div class="pill-n">2.3%</div><div class="pill-l">Accuracy at SNR −10 dB</div></div>
+      <div class="pill"><div class="pill-n">14.4k</div><div class="pill-l">Holdout samples evaluated</div></div>
     </div>
   </div>
 </header>
@@ -81,10 +81,10 @@
 <!-- ── Overall accuracy vs SNR ── -->
 <section id="snr-overall">
 <h2>Overall Accuracy vs SNR</h2>
-<p>Overall classification accuracy across all 47 signal classes at each SNR level. The model rises sharply from 0 dB (75%) to peak at +5 dB (83%), then settles to a 70-72% plateau from +10 dB up. Below 0 dB the problem becomes very hard — constellation structure collapses into noise.</p>
+<p>Overall classification accuracy across all 47 signal classes at each SNR level. Accuracy rises sharply from -5 dB (13%) to a peak at +5 dB (78%), then declines to a 58-61% plateau from +15 dB up — a non-monotonic curve, not yet the smooth monotonic rise we're aiming for. The high-SNR dip is concentrated in a handful of classes (see Hard Classes below) whose accuracy collapses above +10 dB; most classes remain near-100% at high SNR. Below -5 dB the problem becomes very hard — constellation structure collapses into noise.</p>
 <div class="chart-card">
   <h3>All-class accuracy vs SNR</h3>
-  <p>Evaluated on a dedicated v6 holdout set — 70,500 samples, seed=3333</p>
+  <p>Evaluated on a dedicated v6 holdout set (regenerated with corrected signal generators for ACARS, DTMF, AM_DSB, AM_DSB_SC, AM_SSB_LSB/USB, EAS_SAME, MDC_1200 and P25_C4FM) — 14,382 samples, seed=3333</p>
   <div class="chart-container" style="height:280px">
     <canvas id="chartSnrOverall"></canvas>
   </div>
@@ -94,7 +94,7 @@
 <!-- ── Per-class accuracy ── -->
 <section id="class-acc">
 <h2>Per-Class Accuracy (all SNRs mixed)</h2>
-<p>Accuracy for each of the 47 signal classes, averaged over all SNR levels from −10 to +30 dB. LFM, ADS-B, AM_DSB and POCSAG score highest due to their distinctive spectral signatures (chirp sweep, packet preamble, strong carrier, FSK paging tones). QAM64, 16PSK, QAM32, NAVTEX and 32PSK are the hardest — primarily due to constellation-order confusion within the PSK/QAM family.</p>
+<p>Accuracy for each of the 47 signal classes, averaged over all SNR levels from −10 to +30 dB. AM_SSB_LSB, LFM, POCSAG and ADS-B score highest due to their distinctive spectral signatures (single-sideband, chirp sweep, FSK paging tones, packet preamble). QAM64, QAM32, 16PSK, FM_WB and RTTY are the hardest — mostly constellation-order confusion within the PSK/QAM family, plus a high-SNR collapse for FM_WB and RTTY.</p>
 
 <div class="chart-card">
   <div class="filter-row" id="classFilterRow">
@@ -132,7 +132,7 @@
 <!-- ── Hard classes ── -->
 <section id="hard-classes">
 <h2>Hard Classes Analysis</h2>
-<p>Classes with accuracy below 50% are next in line for targeted improvement. The common root causes are constellation-order overlap within the PSK/QAM family, structural confusion with neighbouring protocol classes, and a training-noise floor that under-represents genuinely clean (+20..+30 dB) signals.</p>
+<p>Classes with accuracy below 50% are next in line for targeted improvement — 21 of 47 classes fall in this band. The classic PSK/QAM-order-confusion group (QAM64, QAM32, 16PSK, 32PSK, QAM256, QAM16) persists from earlier versions. A second group — several of the generator-fixed classes (ACARS, DTMF, AM_DSB, AM_DSB_SC, EAS_SAME, P25_C4FM, FLEX) plus FM_WB and RTTY — now produce structurally correct signals but show a sharp "high-SNR collapse": strong accuracy in a narrow SNR band, falling to near-zero above +10..+15 dB.</p>
 
 <div class="chart-card">
   <h3>Classes with accuracy &lt; 50%</h3>
@@ -143,25 +143,26 @@
 </div>
 
 <div class="results" style="margin-top:1.2rem">
-  <div class="rrow"><span class="rl">QAM64 — 12.5%</span><span class="rv r">Worst class. Confused mostly with QAM256 — the model frequently mistakes the denser constellation for a higher-order one, especially at high SNR.</span></div>
-  <div class="rrow"><span class="rl">16PSK — 13.4%</span><span class="rv r">Confused with 8PSK and QPSK — classic PSK-order ambiguity, persists across all SNRs.</span></div>
-  <div class="rrow"><span class="rl">QAM32 — 21.2%</span><span class="rv r">Confused with QAM256 and QAM16 — same constellation-order overlap as QAM64.</span></div>
-  <div class="rrow"><span class="rl">NAVTEX — 31.6%</span><span class="rv r">FSK-based maritime telex — confused with RTTY and P25_PHASE2 at high SNR (similar tone-switching structure).</span></div>
-  <div class="rrow"><span class="rl">32PSK — 33.0%</span><span class="rv r">Confused with QPSK and 8PSK — same PSK-order ambiguity as 16PSK.</span></div>
-  <div class="rrow"><span class="rl">AM_DSB_SC — 37.6%</span><span class="rv r">Suppressed-carrier AM — overlaps with QAM256 and other amplitude-modulated digital signals at low SNR.</span></div>
-  <div class="rrow"><span class="rl">QAM256 — 43.7%</span><span class="rv r">High-order QAM — degrades at very high SNR, likely a training-noise-floor effect (the model rarely saw genuinely clean +30 dB QAM256 examples).</span></div>
-  <div class="rrow"><span class="rl">QPSK — 46.5%</span><span class="rv r">Confused with neighbouring PSK orders, though less severely than 16PSK/32PSK.</span></div>
-  <div class="rrow"><span class="rl">4FSK — 49.8%</span><span class="rv r">Accuracy collapses from 76.5% at 0 dB to ~3% at +15..+30 dB — a strong example of the high-SNR training-noise-floor issue.</span></div>
-  <div class="rrow"><span class="rl">TONE — 49.5%</span><span class="rv r">Single-tone carrier — confused with AM_DSB and OOK, which can look similar without modulation present.</span></div>
+  <div class="rrow"><span class="rl">QAM64 — 7.5%</span><span class="rv r">Worst class. Low across every SNR (peaks at just 20.6% at +5 dB) — constellation-order confusion with QAM256/QAM32, the densest end of the QAM family.</span></div>
+  <div class="rrow"><span class="rl">QAM32 — 8.2%</span><span class="rv r">Same constellation-order overlap as QAM64, peaking at only 14.7%.</span></div>
+  <div class="rrow"><span class="rl">16PSK — 9.8%</span><span class="rv r">PSK-order ambiguity with 8PSK/32PSK — peaks at 26.5% at +5 dB and falls to ~6-12% at high SNR.</span></div>
+  <div class="rrow"><span class="rl">RTTY — 12.7%</span><span class="rv r">Peaks at 44.1% at 0 dB, then collapses to 0% by +30 dB — a high-SNR collapse, likely confusion with FSK/4FSK at clean SNR.</span></div>
+  <div class="rrow"><span class="rl">FM_WB — 13.7%</span><span class="rv r">Peaks at 50% around 0/+5 dB but drops below 6% above +10 dB — strong high-SNR collapse, likely confused with FM_NB or AM_DSB once clean.</span></div>
+  <div class="rrow"><span class="rl">TONE — 20.6%</span><span class="rv r">Low across the board (peaks 47.1% at +5 dB) — single-tone carrier confused with AM_DSB/OOK, which look similar without modulation present.</span></div>
+  <div class="rrow"><span class="rl">ACARS — 21.2%</span><span class="rv r">Was 0% under v7 (generator bug). Now structurally correct, but shows an <em>inverted</em> SNR curve — best at -10 dB (58.8%), collapses to ~3% at 0/+5 dB, then partially recovers above +10 dB. Likely confused with noise-floor classes at low SNR and with other AM/FSK signals in the mid-SNR range.</span></div>
+  <div class="rrow"><span class="rl">EAS_SAME — 25.5%</span><span class="rv r">Was 9.5% under v7. Strong only at low/mid SNR (85.3% at -5 dB, 76.5% at 0 dB), then collapses to 0% at +10 dB and above — a narrow "sweet spot" rather than the usual low-SNR-bad/high-SNR-good pattern.</span></div>
+  <div class="rrow"><span class="rl">DTMF — 25.8%</span><span class="rv r">Was 0% under v7. Now peaks at 100% at 0 dB but collapses to ~12% above +15 dB — same high-SNR-collapse pattern as several other newly-fixed classes.</span></div>
+  <div class="rrow"><span class="rl">P25_C4FM — 27.1%</span><span class="rv r">Was 18.3% under v7. Peaks at 91.2% at +5 dB, then collapses to single digits above +15 dB.</span></div>
+  <div class="rrow"><span class="rl">AM_DSB — 29.4%</span><span class="rv r">Peaks at 79.4% at 0 dB, falls to single digits by +30 dB — high-SNR collapse, likely confusion with AM_DSB_SC or QAM256 once clean.</span></div>
 </div>
 
-<p class="note">v7 training (in progress) targets these specific failure modes: <code>IqAugment</code>'s noise ceiling was raised from 30 dB to 40 dB SNR so the model sees more near-clean high-SNR examples (addressing 4FSK/QAM256/P25_C4FM-style high-SNR collapse), and <code>HARD_CLASSES</code> oversampling now also covers P25_C4FM, NXDN, DTMF, GFSK, FSK, TONE, 4FSK and 8FSK.</p>
+<p class="note">v9 (this page) fixed 8 generator bugs from v7 — Hermitian-symmetric-spectrum and unfiltered-audio issues in ACARS, DTMF, AM_DSB, AM_DSB_SC, AM_SSB_LSB/USB, EAS_SAME, MDC_1200 and P25_C4FM. Overall accuracy rose from 50.2% (v7) to 52.7% (v9), and 5 classes that were stuck at 0% under v7 (ACARS, DTMF, AM_DSB_SC, AM_SSB_LSB, AM_SSB_USB) now score 21-84%. The dominant remaining issue is the high-SNR collapse seen in several of these newly-fixed classes plus FM_WB/RTTY/AM_DSB — each performs well in a narrow SNR band (often 0..+10 dB) but falls toward 0% at +15 dB and above, which is what produces the non-monotonic overall SNR curve above. Next step: investigate whether these classes are being confused with a specific neighbour at high SNR, and consider extending <code>HARD_CLASSES</code> oversampling and the SNR augmentation range to cover this band.</p>
 </section>
 
 </main>
 
 <footer>
-  <span>Open RF Stack · <a href="https://github.com/OpenRFStack">github.com/OpenRFStack</a> · Model: amr_cnn_v6_47class.onnx · Evaluated on held-out v6 test split</span>
+  <span>Open RF Stack · <a href="https://github.com/OpenRFStack">github.com/OpenRFStack</a> · Model: amr_cnn_v9_47class.onnx · Evaluated on regenerated held-out v6 test split</span>
   <div class="footer-links">
     <a href="index.html">Documentation</a>
     <a href="index.html#ml-acc">ML Accuracy Section</a>
@@ -171,49 +172,52 @@
 <script>
 'use strict';
 
-// ── Real measured data from eval_holdout.py (model v6) ───────────────────────
-// Data from eval_holdout.py on the v6 holdout set — 70,500 samples, seed=3333
+// ── Real measured data from eval_holdout.py (model v9) ───────────────────────
+// Data from eval_holdout.py on the regenerated v6 holdout set — 14,382 samples, seed=3333
 const DATA = {
   snr_levels: [-10,-5,0,5,10,15,20,25,30],
-  snr_acc: {"-10":3.6,"-5":15.3,"0":74.8,"5":83.1,"10":76.4,"15":72.3,"20":72.0,"25":70.5,"30":70.5},
+  snr_acc: {"-10":2.3,"-5":13.0,"0":71.1,"5":78.1,"10":69.3,"15":61.5,"20":60.1,"25":58.9,"30":59.9},
   class_acc: {
-    "16ASK":62.6,"16PSK":13.4,"32PSK":33.0,"4ASK":63.8,"4FSK":49.8,"8FSK":62.4,
-    "8PSK":26.9,"ACARS":76.9,"ADS_B":97.8,"AIS":71.5,"AM_DSB":99.3,"AM_DSB_SC":37.6,
-    "AM_SSB_LSB":96.8,"AM_SSB_USB":93.6,"BPSK":79.2,"CSS":89.5,"DMR":91.8,"DSC":80.0,
-    "DSTAR":96.6,"DTMF":89.7,"EAS_SAME":69.8,"FLEX":86.9,"FM_NB":74.6,"FM_WB":81.7,
-    "FSK":70.5,"GFSK":73.2,"GMSK":60.2,"LFM":94.2,"MDC_1200":91.9,"MSK":66.6,
-    "NAVTEX":31.6,"NXDN":92.6,"OFDM":87.9,"OOK":93.4,"P25_C4FM":71.9,"P25_PHASE2":91.9,
-    "POCSAG":97.8,"PSK31":67.0,"QAM16":45.0,"QAM256":43.7,"QAM32":21.2,"QAM64":12.5,
-    "QPSK":46.5,"RTTY":67.9,"TETRA":85.6,"TONE":49.5,"VDL2":68.4
+    "16ASK":74.5,"16PSK":9.8,"32PSK":35.0,"4ASK":67.6,"4FSK":36.9,"8FSK":71.6,
+    "8PSK":40.2,"ACARS":21.2,"ADS_B":82.0,"AIS":80.1,"AM_DSB":29.4,"AM_DSB_SC":39.2,
+    "AM_SSB_LSB":84.3,"AM_SSB_USB":71.9,"BPSK":71.9,"CSS":79.7,"DMR":43.8,"DSC":70.6,
+    "DSTAR":79.4,"DTMF":25.8,"EAS_SAME":25.5,"FLEX":23.5,"FM_NB":67.0,"FM_WB":13.7,
+    "FSK":73.5,"GFSK":66.0,"GMSK":72.5,"LFM":84.0,"MDC_1200":46.1,"MSK":54.6,
+    "NAVTEX":48.0,"NXDN":65.0,"OFDM":64.7,"OOK":58.8,"P25_C4FM":27.1,"P25_PHASE2":72.9,
+    "POCSAG":83.3,"PSK31":65.0,"QAM16":44.4,"QAM256":34.6,"QAM32":8.2,"QAM64":7.5,
+    "QPSK":77.8,"RTTY":12.7,"TETRA":69.9,"TONE":20.6,"VDL2":73.9
   },
   class_snr: {
-    "BPSK":     {"-10":0.0,"-5":0.0,"0":73.5,"5":100.0,"10":100.0,"15":94.1,"20":97.1,"25":97.1,"30":91.2},
-    "QPSK":     {"-10":0.0,"-5":5.9,"0":73.5,"5":100.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
-    "8PSK":     {"-10":0.0,"-5":0.0,"0":17.6,"5":82.4,"10":55.9,"15":52.9,"20":50.0,"25":55.9,"30":44.1},
-    "16PSK":    {"-10":0.0,"-5":0.0,"0":11.8,"5":29.4,"10":11.8,"15":14.7,"20":14.7,"25":8.8,"30":8.8},
-    "32PSK":    {"-10":0.0,"-5":0.0,"0":26.5,"5":38.2,"10":32.4,"15":23.5,"20":26.5,"25":11.8,"30":17.6},
-    "QAM16":    {"-10":0.0,"-5":0.0,"0":50.0,"5":79.4,"10":76.5,"15":61.8,"20":55.9,"25":64.7,"30":55.9},
-    "QAM32":    {"-10":0.0,"-5":0.0,"0":2.9,"5":20.6,"10":8.8,"15":5.9,"20":2.9,"25":0.0,"30":2.9},
-    "QAM64":    {"-10":0.0,"-5":2.9,"0":8.8,"5":23.5,"10":17.6,"15":5.9,"20":8.8,"25":8.8,"30":14.7},
-    "QAM256":   {"-10":0.0,"-5":29.4,"0":88.2,"5":91.2,"10":97.1,"15":88.2,"20":94.1,"25":82.4,"30":85.3},
-    "FM_WB":    {"-10":0.0,"-5":0.0,"0":94.1,"5":100.0,"10":100.0,"15":97.1,"20":94.1,"25":100.0,"30":82.4},
-    "FM_NB":    {"-10":0.0,"-5":11.8,"0":97.1,"5":100.0,"10":100.0,"15":94.1,"20":91.2,"25":91.2,"30":82.4},
-    "P25_C4FM": {"-10":0.0,"-5":2.9,"0":73.5,"5":85.3,"10":20.6,"15":0.0,"20":8.8,"25":0.0,"30":0.0},
-    "NXDN":     {"-10":8.8,"-5":5.9,"0":100.0,"5":91.2,"10":67.6,"15":50.0,"20":38.2,"25":23.5,"30":23.5},
-    "RTTY":     {"-10":0.0,"-5":0.0,"0":26.5,"5":32.4,"10":14.7,"15":8.8,"20":11.8,"25":2.9,"30":0.0},
-    "NAVTEX":   {"-10":0.0,"-5":0.0,"0":67.6,"5":44.1,"10":47.1,"15":52.9,"20":41.2,"25":44.1,"30":50.0},
-    "AM_DSB":   {"-10":0.0,"-5":2.9,"0":88.2,"5":52.9,"10":44.1,"15":26.5,"20":47.1,"25":26.5,"30":17.6},
-    "TONE":     {"-10":0.0,"-5":2.9,"0":55.9,"5":50.0,"10":58.8,"15":52.9,"20":58.8,"25":55.9,"30":47.1},
-    "DTMF":     {"-10":0.0,"-5":0.0,"0":73.5,"5":61.8,"10":50.0,"15":41.2,"20":17.6,"25":26.5,"30":50.0},
-    "AIS":      {"-10":0.0,"-5":64.7,"0":100.0,"5":100.0,"10":100.0,"15":97.1,"20":100.0,"25":100.0,"30":100.0},
-    "ADS_B":    {"-10":0.0,"-5":67.6,"0":100.0,"5":100.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
-    "OFDM":     {"-10":0.0,"-5":0.0,"0":0.0,"5":97.1,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
-    "4FSK":     {"-10":0.0,"-5":0.0,"0":76.5,"5":35.3,"10":11.8,"15":0.0,"20":5.9,"25":2.9,"30":2.9},
-    "GMSK":     {"-10":0.0,"-5":23.5,"0":76.5,"5":97.1,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
-    "DMR":      {"-10":0.0,"-5":0.0,"0":100.0,"5":100.0,"10":100.0,"15":100.0,"20":94.1,"25":100.0,"30":97.1},
-    "POCSAG":   {"-10":0.0,"-5":94.1,"0":100.0,"5":100.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":97.8},
-    "CSS":      {"-10":0.0,"-5":14.7,"0":100.0,"5":100.0,"10":94.1,"15":88.2,"20":85.3,"25":85.3,"30":97.1},
-    "LFM":      {"-10":100.0,"-5":100.0,"0":100.0,"5":100.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0}
+    "BPSK":     {"-10":0.0,"-5":0.0,"0":64.7,"5":100.0,"10":100.0,"15":94.1,"20":94.1,"25":97.1,"30":97.1},
+    "QPSK":     {"-10":0.0,"-5":8.8,"0":91.2,"5":100.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
+    "8PSK":     {"-10":0.0,"-5":2.9,"0":23.5,"5":67.6,"10":55.9,"15":44.1,"20":67.6,"25":50.0,"30":50.0},
+    "16PSK":    {"-10":0.0,"-5":0.0,"0":23.5,"5":26.5,"10":8.8,"15":5.9,"20":5.9,"25":5.9,"30":11.8},
+    "32PSK":    {"-10":0.0,"-5":0.0,"0":55.9,"5":61.8,"10":55.9,"15":26.5,"20":35.3,"25":41.2,"30":38.2},
+    "QAM16":    {"-10":0.0,"-5":0.0,"0":50.0,"5":73.5,"10":67.6,"15":47.1,"20":47.1,"25":58.8,"30":55.9},
+    "QAM32":    {"-10":0.0,"-5":0.0,"0":8.8,"5":14.7,"10":14.7,"15":0.0,"20":8.8,"25":14.7,"30":11.8},
+    "QAM64":    {"-10":0.0,"-5":0.0,"0":11.8,"5":20.6,"10":14.7,"15":5.9,"20":5.9,"25":2.9,"30":5.9},
+    "QAM256":   {"-10":0.0,"-5":0.0,"0":76.5,"5":85.3,"10":50.0,"15":35.3,"20":20.6,"25":14.7,"30":29.4},
+    "FM_WB":    {"-10":0.0,"-5":0.0,"0":50.0,"5":50.0,"10":11.8,"15":2.9,"20":2.9,"25":0.0,"30":5.9},
+    "FM_NB":    {"-10":0.0,"-5":0.0,"0":94.1,"5":91.2,"10":91.2,"15":91.2,"20":73.5,"25":82.4,"30":79.4},
+    "P25_C4FM": {"-10":0.0,"-5":0.0,"0":73.5,"5":91.2,"10":44.1,"15":11.8,"20":8.8,"25":8.8,"30":5.9},
+    "NXDN":     {"-10":0.0,"-5":0.0,"0":100.0,"5":100.0,"10":85.3,"15":82.4,"20":76.5,"25":64.7,"30":76.5},
+    "RTTY":     {"-10":0.0,"-5":5.9,"0":44.1,"5":29.4,"10":14.7,"15":2.9,"20":5.9,"25":11.8,"30":0.0},
+    "NAVTEX":   {"-10":0.0,"-5":2.9,"0":58.8,"5":52.9,"10":61.8,"15":73.5,"20":55.9,"25":52.9,"30":73.5},
+    "AM_DSB":   {"-10":0.0,"-5":0.0,"0":79.4,"5":70.6,"10":23.5,"15":26.5,"20":26.5,"25":29.4,"30":8.8},
+    "TONE":     {"-10":0.0,"-5":0.0,"0":26.5,"5":47.1,"10":20.6,"15":23.5,"20":26.5,"25":17.6,"30":23.5},
+    "DTMF":     {"-10":0.0,"-5":0.0,"0":100.0,"5":55.9,"10":29.4,"15":11.8,"20":11.8,"25":11.8,"30":11.8},
+    "AIS":      {"-10":0.0,"-5":100.0,"0":100.0,"5":97.1,"10":85.3,"15":85.3,"20":76.5,"25":88.2,"30":88.2},
+    "ADS_B":    {"-10":0.0,"-5":44.1,"0":100.0,"5":100.0,"10":100.0,"15":100.0,"20":100.0,"25":97.1,"30":97.1},
+    "OFDM":     {"-10":0.0,"-5":0.0,"0":0.0,"5":88.2,"10":100.0,"15":97.1,"20":97.1,"25":100.0,"30":100.0},
+    "4FSK":     {"-10":0.0,"-5":0.0,"0":64.7,"5":50.0,"10":52.9,"15":47.1,"20":44.1,"25":38.2,"30":35.3},
+    "GMSK":     {"-10":0.0,"-5":5.9,"0":61.8,"5":94.1,"10":100.0,"15":97.1,"20":100.0,"25":94.1,"30":100.0},
+    "DMR":      {"-10":0.0,"-5":0.0,"0":100.0,"5":100.0,"10":91.2,"15":38.2,"20":23.5,"25":29.4,"30":11.8},
+    "POCSAG":   {"-10":0.0,"-5":55.9,"0":97.1,"5":100.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":97.1},
+    "CSS":      {"-10":0.0,"-5":38.2,"0":100.0,"5":100.0,"10":100.0,"15":94.1,"20":94.1,"25":97.1,"30":94.1},
+    "LFM":      {"-10":0.0,"-5":55.9,"0":100.0,"5":100.0,"10":100.0,"15":100.0,"20":100.0,"25":100.0,"30":100.0},
+    "ACARS":    {"-10":58.8,"-5":20.6,"0":2.9,"5":2.9,"10":20.6,"15":17.6,"20":17.6,"25":20.6,"30":29.4},
+    "EAS_SAME": {"-10":47.1,"-5":85.3,"0":76.5,"5":20.6,"10":0.0,"15":0.0,"20":0.0,"25":0.0,"30":0.0},
+    "AM_DSB_SC":{"-10":0.0,"-5":82.4,"0":82.4,"5":44.1,"10":41.2,"15":23.5,"20":29.4,"25":23.5,"30":26.5}
   }
 };
 
@@ -246,7 +250,7 @@ new Chart(document.getElementById('chartSnrOverall'), {
     labels: ['-10','-5','0','5','10','15','20','25','30'],
     datasets: [{
       label: 'Mean accuracy',
-      data: [2.8,6.8,31.6,61.4,77.8,82.9,83.8,84.0,84.4],
+      data: [2.3,13.0,71.1,78.1,69.3,61.5,60.1,58.9,59.9],
       borderColor: '#4f9eff', backgroundColor: 'rgba(79,158,255,0.1)',
       fill: true, tension: 0.35, pointRadius: 5, pointHoverRadius: 7,
       pointBackgroundColor: '#4f9eff'
