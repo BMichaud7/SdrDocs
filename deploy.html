@@ -61,6 +61,7 @@ pre.code-block {
   <div class="nav-sep">Deployment Guide</div>
   <a href="#prereqs">Prerequisites</a>
   <a href="#prebuilt">Pre-built Images</a>
+  <a href="#pi4">Pi4 / Embedded</a>
   <a href="#docker">Docker Compose</a>
   <a href="#k8s">Kubernetes</a>
   <a href="#config">Configuration</a>
@@ -98,23 +99,24 @@ pre.code-block {
 <p class="section-label">System Architecture</p>
 <div class="arch-diagram">
 <pre>
-  ┌──────────────────────────────────────────────────────────────────────┐
-  │                        Open RF Stack                                 │
-  │                                                                      │
-  │  USB SDR ──► SdrResourceManager ──► AcquisitionApp ─────────────┐   │
-  │                                                                  │   │
-  │                                           Apache Artemis (AMQP) ◄┤   │
-  │                                                                  │   │
-  │       ┌─────────── AnalysisApp (ONNX GPU) ◄──────────────────────┤   │
-  │       │                                                          │   │
-  │       ├─────────── DemodApp ◄────────────────────────────────────┤   │
-  │       │            (P25/ADS-B/AIS/EAS/DSC/ACARS/VDL2)           │   │
-  │       │                                                          │   │
-  │       ├─────────── SpeechApp (whisper.cpp) ◄────────────────────-┘   │
-  │       │                                                              │
-  │       └─────────── PostgreSQL ◄── signal_logger                      │
-  │                       │                                              │
-  │                    Grafana / pgAdmin                                 │
+  ┌─────────────────────── Fixed-site node ──────────────────────────────┐
+  │  USB SDR ──► SdrResourceManager ──► AcquisitionApp ──────────────┐  │
+  │                                                                   │  │
+  │                                      Apache Artemis / qdrouterd ◄─┤  │
+  │                                                                   │  │
+  │       ┌─────────── AnalysisApp (ONNX GPU) ◄──────────────────────┤  │
+  │       ├─────────── DemodApp (P25/ADS-B/AIS/EAS/DSC/ACARS) ◄──────┤  │
+  │       ├─────────── SpeechApp (whisper.cpp) ◄──────────────────────┘  │
+  │       └─────────── PostgreSQL ◄── signals (lat/lon/alt from GpsApp)  │
+  └──────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────── Pi4 / embedded (≤235 MB RAM) ─────────────────┐
+  │  RTL-SDR USB ──► sdr_controller ──► sdr_acquisition (2.4 MSPS)   │  │
+  │                         qpid-dispatch-router (no JVM, no k3s)    │  │
+  │  GpsApp ──► gps.location ──────────────────────────────────────►─┤  │
+  │                                                                   │  │
+  │  [recon variant] sdr_recon.py ◄── rf.detections                  │  │
+  │    └──► /recon/*.cf32 + .json (lat/lon/alt stamped from GpsApp)  │  │
   └──────────────────────────────────────────────────────────────────────┘
 </pre>
 </div>
@@ -236,6 +238,92 @@ pre.code-block {
   -v /dev/bus/usb:/dev/bus/usb \
   -v /dev/ttyUSB0:/dev/ttyACM0 \
   ghcr.io/openrfstack/openrfstack-mobile:latest</span></pre>
+    </div>
+  </div>
+
+</div>
+
+<!-- Pi4 / Embedded Containers -->
+<p class="section-label" id="pi4">Pi4 &amp; Embedded Containers</p>
+
+<div class="note-box">
+  <strong>No k3s, no JVM.</strong> The Pi4 image replaces ActiveMQ Artemis (~300 MB JVM) and k3s (~500 MB) with <code>qpid-dispatch-router</code> (C, ~20 MB). Idle RAM is ~235 MB on a 1 GB Raspberry Pi 4, leaving headroom for the OS and other processes.
+</div>
+
+<div class="step-list">
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <h3>Build the Pi4 image</h3>
+      <p>All repos must be siblings under the same parent directory. Build from the parent so <code>COPY</code> instructions can reach sibling repos.</p>
+<pre class="code-block"><span class="code-cmd">podman build \
+  -f SdrResourceManager/Containerfile.pi4 \
+  -t openrfstack-pi4:latest \
+  --platform linux/arm64 \
+  .</span>   <span class="code-comment"># run from parent dir containing all sibling repos</span></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <h3>Run the Pi4 stack</h3>
+      <p>Single container: qpid-dispatch-router (AMQP broker), sdr_controller, sdr_acquisition (24 MHz–1.1 GHz sweep), and optionally GpsApp. RTL-SDR accessed via USB; no SoapyRemote required.</p>
+<pre class="code-block"><span class="code-cmd">podman compose -f SdrResourceManager/compose.pi4.yml up -d</span>
+
+<span class="code-comment"># No GPS dongle? Remove the /dev/ttyACM0 volume mount from compose.pi4.yml.
+# Memory limit: 512 MB hard ceiling (typical idle ~235 MB).
+
+# Verify the broker is up:
+</span><span class="code-cmd">nc -z localhost 5672 &amp;&amp; echo "broker ready"</span></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <h3>Build and run the recon container</h3>
+      <p>Extends the Pi4 image with <code>sdr_recon.py</code> — a passive IQ recorder. When any signal above the SNR threshold appears on <code>rf.detections</code>, it requests a 10-second NARROWBAND capture from sdr_controller and saves the IQ to disk. GPS coordinates from GpsApp are attached to each capture.</p>
+<pre class="code-block"><span class="code-comment"># Build pi4 first (recon extends it)</span>
+<span class="code-cmd">podman build -f SdrResourceManager/Containerfile.pi4  -t openrfstack-pi4:latest  --platform linux/arm64 .</span>
+<span class="code-cmd">podman build -f SdrResourceManager/Containerfile.recon -t openrfstack-recon:latest --platform linux/arm64 .</span>
+
+<span class="code-cmd">podman compose -f SdrResourceManager/compose.recon.yml up -d</span>
+
+<span class="code-comment"># Watch captures land:
+</span><span class="code-cmd">watch ls -lh /mnt/recon/</span></pre>
+      <div class="note-box">Mount <code>/mnt/recon</code> to a USB drive or NFS share — 10-second CF32 captures at 2.4 MSPS are ~192 MB each.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <h3>Recon tuning</h3>
+      <p>All recon parameters are environment variables — no config file edit needed:</p>
+<pre class="code-block"><span class="code-comment"># compose.recon.yml environment overrides:</span>
+<span class="code-key">RECON_SNR_MIN</span>:    <span class="code-val">20</span>      <span class="code-comment"># raise to reduce false triggers (default 15 dB)</span>
+<span class="code-key">RECON_CAPTURE_S</span>: <span class="code-val">30</span>      <span class="code-comment"># longer captures for slow-burst signals (default 10 s)</span>
+<span class="code-key">RECON_COOLDOWN</span>:  <span class="code-val">300</span>     <span class="code-comment"># 5 min before re-capturing same frequency (default 60 s)</span>
+<span class="code-key">RECON_FORMAT</span>:    <span class="code-val">npz</span>     <span class="code-comment"># cf32 (default) | npz | wav</span>
+<span class="code-key">RECON_DB</span>:        <span class="code-val">host=192.168.1.10 dbname=sdr_scanner user=sdr password=secret</span>
+<span class="code-comment"># RECON_DB writes captures to the recon_captures PostgreSQL table with lat/lon/alt</span></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <h3>Load captures on a PC</h3>
+<pre class="code-block"><span class="code-comment"># CF32 — inspectrum, gqrx, numpy:</span>
+<span class="code-cmd">import numpy as np
+iq = np.fromfile("20260616T123456Z_462.5500MHz_25kHz.cf32", dtype=np.complex64)
+# Sidecar JSON has freq, BW, SNR, GPS coordinates:
+import json; meta = json.load(open("20260616T123456Z_462.5500MHz_25kHz.json"))</span>
+
+<span class="code-comment"># WAV — Audacity / SDR# (2-channel, ch0=I ch1=Q):</span>
+<span class="code-cmd">inspectrum 20260616T123456Z_462.5500MHz_25kHz.wav</span></pre>
     </div>
   </div>
 
@@ -554,6 +642,26 @@ sudo udevadm control --reload-rules</span></pre>
     <div class="step-body">
       <h3>pqxx demangle_type_name linker error</h3>
       <p>Occurs when libpqxx 7.x is paired with <code>std::optional&lt;T&gt;</code> in the same translation unit. The <code>AlertStore</code> uses a pimpl pattern and manually-built SQL strings to avoid this — do not include <code>&lt;pqxx/pqxx&gt;</code> in any header that is also included by a TU that includes <code>&lt;nlohmann/json.hpp&gt;</code>.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num" style="background:var(--red)">!</div>
+    <div class="step-body">
+      <h3>RTL-SDR not found on Pi4 container</h3>
+      <p>The Pi4 container uses <code>SoapyRTLSDR</code> with direct USB (no SoapyRemote). Common causes of "no device found":</p>
+<pre class="code-block"><span class="code-comment"># 1. Run udev rule on Pi4 host before starting the container:</span>
+<span class="code-cmd">echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", MODE="0666"' \
+  | sudo tee /etc/udev/rules.d/99-rtlsdr.rules
+sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</span>
+
+<span class="code-comment"># 2. Verify SoapySDR finds the device:</span>
+<span class="code-cmd">podman run --rm --privileged -v /dev/bus/usb:/dev/bus/usb \
+  openrfstack-pi4:latest SoapySDRUtil --find="driver=rtlsdr"</span>
+
+<span class="code-comment"># 3. Check the kernel RTL-SDR driver isn't claiming the device:</span>
+<span class="code-cmd">sudo rmmod dvb_usb_rtl28xxu rtl2832 2>/dev/null; true</span>
+<span class="code-comment"># Add "blacklist dvb_usb_rtl28xxu" to /etc/modprobe.d/blacklist-rtl.conf to persist</span></pre>
     </div>
   </div>
 </div>
